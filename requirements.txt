@@ -1,0 +1,43 @@
+# --- Backend API ---
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+pydantic==2.9.2
+python-dotenv==1.0.1
+
+# --- Document parsing ---
+pymupdf==1.24.10          # PDF text + image extraction (PyMuPDF / fitz)
+python-docx==1.1.2        # DOCX parsing
+pytesseract==0.3.13       # OCR for scanned PDFs (requires Tesseract installed on system)
+pdf2image==1.17.0         # Converts PDF pages to images for OCR
+Pillow==10.4.0             # Image handling
+
+# --- Chunking / Orchestration ---
+llama-index==0.11.14
+llama-index-embeddings-voyageai==0.2.3
+llama-index-vector-stores-qdrant==0.3.0
+
+# --- Embeddings (choose one or both) ---
+voyageai==0.2.3            # Voyage AI embeddings (paid API)
+sentence-transformers==3.1.1   # Local/free fallback (BGE models)
+
+# --- Vector database ---
+qdrant-client==1.11.2
+
+# --- Re-ranking ---
+FlagEmbedding==1.2.11      # bge-reranker-v2-m3
+
+# --- LLM / Vision ---
+anthropic==0.34.2          # Claude API (generation + vision)
+
+# --- Evaluation ---
+ragas==0.1.20
+datasets==3.0.1
+
+# --- Frontend (Stage 9 only) ---
+streamlit==1.39.0
+
+# --- Utilities ---
+numpy==1.26.4
+pandas==2.2.3
+tqdm==4.66.5
