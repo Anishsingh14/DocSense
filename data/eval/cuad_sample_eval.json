@@ -1,0 +1,138 @@
+[
+  {
+    "doc_id": "CUAD_XLITECHNOLOGIES_INC_12_02_2015-EX-10_02-STRATEGIC_ALLIANCE_A",
+    "mode": "legal",
+    "clause_category": "Document Name",
+    "question": "What does this contract say about document name?",
+    "expected_answer": "STRATEGIC ALLIANCE AGREEMENT",
+    "expected_page": 1
+  },
+  {
+    "doc_id": "CUAD_XLITECHNOLOGIES_INC_12_02_2015-EX-10_02-STRATEGIC_ALLIANCE_A",
+    "mode": "legal",
+    "clause_category": "Parties",
+    "question": "What does this contract say about parties?",
+    "expected_answer": "BOSCH INTERNATIONAL, LLC",
+    "expected_page": 1
+  },
+  {
+    "doc_id": "CUAD_XLITECHNOLOGIES_INC_12_02_2015-EX-10_02-STRATEGIC_ALLIANCE_A",
+    "mode": "legal",
+    "clause_category": "Agreement Date",
+    "question": "What does this contract say about agreement date?",
+    "expected_answer": "1st day of December, 2015",
+    "expected_page": 1
+  },
+  {
+    "doc_id": "CUAD_XLITECHNOLOGIES_INC_12_02_2015-EX-10_02-STRATEGIC_ALLIANCE_A",
+    "mode": "legal",
+    "clause_category": "Exclusivity",
+    "question": "What does this contract say about exclusivity?",
+    "expected_answer": "Bosch hereby grants to Client the exclusive rights to sell and distribute the Product, subject to the Territory as set forth below, to certain select companies in the Automotive Industry, each of which shall be approved by Bosch in writing as requested by the Client on a case by case basis.",
+    "expected_page": 2
+  },
+  {
+    "doc_id": "CUAD_XLITECHNOLOGIES_INC_12_02_2015-EX-10_02-STRATEGIC_ALLIANCE_A",
+    "mode": "legal",
+    "clause_category": "License Grant",
+    "question": "What does this contract say about license grant?",
+    "expected_answer": "BOSCH hereby grants CLIENT the \"Exclusive Distribution License Rights\" sell and distribute the Products within the \"Territory\".",
+    "expected_page": 2
+  },
+  {
+    "doc_id": "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT",
+    "mode": "legal",
+    "clause_category": "Document Name",
+    "question": "What does this contract say about document name?",
+    "expected_answer": "SUPPLY AGREEMENT",
+    "expected_page": 1
+  },
+  {
+    "doc_id": "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT",
+    "mode": "legal",
+    "clause_category": "Parties",
+    "question": "What does this contract say about parties?",
+    "expected_answer": "Gridiron BioNutrients, Inc",
+    "expected_page": 1
+  },
+  {
+    "doc_id": "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT",
+    "mode": "legal",
+    "clause_category": "Agreement Date",
+    "question": "What does this contract say about agreement date?",
+    "expected_answer": "1/27/2020",
+    "expected_page": 5
+  },
+  {
+    "doc_id": "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT",
+    "mode": "legal",
+    "clause_category": "Governing Law",
+    "question": "What does this contract say about governing law?",
+    "expected_answer": "This Agreement and any amendments thereto shall be construed according to the laws of the State of Colorado without regard to conflicts of law principles and any disputes hereunder shall be litigated in a state court in Colorado.",
+    "expected_page": 4
+  },
+  {
+    "doc_id": "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT",
+    "mode": "legal",
+    "clause_category": "Termination For Convenience",
+    "question": "What does this contract say about termination for convenience?",
+    "expected_answer": "Either Party may terminate this Agreement at any time prior to delivery of the Product.",
+    "expected_page": 3
+  },
+  {
+    "doc_id": "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT",
+    "mode": "legal",
+    "clause_category": "Anti-Assignment",
+    "question": "What does this contract say about anti-assignment?",
+    "expected_answer": "This Agreement may not be waived, amended or assigned without an agreed written and signed document, signed by both Parties.",
+    "expected_page": 4
+  },
+  {
+    "doc_id": "CUAD_TRANSMONTAIGNEPARTNERSLLC_03_13_2020-EX-10_9-SERVICES_AGREEM",
+    "mode": "legal",
+    "clause_category": "Document Name",
+    "question": "What does this contract say about document name?",
+    "expected_answer": "SERVICES AGREEMENT",
+    "expected_page": 1
+  },
+  {
+    "doc_id": "CUAD_TRANSMONTAIGNEPARTNERSLLC_03_13_2020-EX-10_9-SERVICES_AGREEM",
+    "mode": "legal",
+    "clause_category": "Parties",
+    "question": "What does this contract say about parties?",
+    "expected_answer": "TLP Management Services, LLC",
+    "expected_page": 1
+  },
+  {
+    "doc_id": "CUAD_TRANSMONTAIGNEPARTNERSLLC_03_13_2020-EX-10_9-SERVICES_AGREEM",
+    "mode": "legal",
+    "clause_category": "Agreement Date",
+    "question": "What does this contract say about agreement date?",
+    "expected_answer": "August __, 2019",
+    "expected_page": 1
+  },
+  {
+    "doc_id": "CUAD_TRANSMONTAIGNEPARTNERSLLC_03_13_2020-EX-10_9-SERVICES_AGREEM",
+    "mode": "legal",
+    "clause_category": "Effective Date",
+    "question": "What does this contract say about effective date?",
+    "expected_answer": "August __, 2019",
+    "expected_page": 1
+  },
+  {
+    "doc_id": "CUAD_TRANSMONTAIGNEPARTNERSLLC_03_13_2020-EX-10_9-SERVICES_AGREEM",
+    "mode": "legal",
+    "clause_category": "Expiration Date",
+    "question": "What does this contract say about expiration date?",
+    "expected_answer": "This Agreement shall remain in effect until terminated by the Parties.",
+    "expected_page": 4
+  },
+  {
+    "doc_id": "CUAD_TRANSMONTAIGNEPARTNERSLLC_03_13_2020-EX-10_9-SERVICES_AGREEM",
+    "mode": "legal",
+    "clause_category": "Governing Law",
+    "question": "What does this contract say about governing law?",
+    "expected_answer": "This Agreement shall be subject to and governed by the laws of the State of Colorado, excluding any conflicts-of-law rule or principle that might refer the construction or interpretation of this Agreement to the laws of another state.",
+    "expected_page": 3
+  }
+]
