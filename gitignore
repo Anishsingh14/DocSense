@@ -1,0 +1,49 @@
+# --- Environment & secrets ---
+.env
+.env.local
+*.key
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Vector DB / local storage ---
+qdrant_storage/
+*.qdrant/
+
+# --- Model caches (auto-downloaded local embedding/reranker weights) ---
+.cache/
+models_cache/
+huggingface_cache/
+
+# --- Uploaded / processed documents (runtime data, not source-controlled) ---
+data/uploads/
+data/processed/
+test_output_images/
+
+# --- Logs ---
+*.log
+logs/
+
+# --- OS files ---
+.DS_Store
+Thumbs.db
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+
+# --- Streamlit ---
+.streamlit/secrets.toml
