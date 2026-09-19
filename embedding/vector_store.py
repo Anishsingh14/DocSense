@@ -141,6 +141,66 @@ def upsert_chunks(embedded_chunks: List[dict]) -> int:
     return len(points)
 
 
+def search(
+    query_vector: List[float],
+    limit: int = 20,
+    doc_ids: Optional[List[str]] = None,
+    doc_type: Optional[str] = None,
+) -> List[dict]:
+    """Vector-similarity search with optional metadata filtering.
+
+    Used by Stage 5's retriever.py to implement mode-aware retrieval:
+    - single_doc: pass doc_ids=[the one doc_id]
+    - multi_doc: pass doc_ids=[all doc_ids in the session]
+    - legal: pass doc_type="legal"
+
+    Args:
+        query_vector: the embedded user question (from
+            embedding.embed_chunks.embed_query()).
+        limit: max number of results to return.
+        doc_ids: if given, restrict results to chunks from these
+            doc_id(s).
+        doc_type: if given, restrict results to chunks with this
+            doc_type.
+
+    Returns:
+        List of dicts, each a chunk's full payload plus a "score"
+        field (cosine similarity, higher is more similar), ordered by
+        descending score.
+    """
+    client = _get_client()
+    if not client.collection_exists(COLLECTION_NAME):
+        return []
+
+    conditions = []
+    if doc_ids:
+        conditions.append(
+            qmodels.FieldCondition(key="doc_id", match=qmodels.MatchAny(any=doc_ids))
+        )
+    if doc_type:
+        conditions.append(
+            qmodels.FieldCondition(key="doc_type", match=qmodels.MatchValue(value=doc_type))
+        )
+
+    query_filter = qmodels.Filter(must=conditions) if conditions else None
+
+    results = client.query_points(
+        collection_name=COLLECTION_NAME,
+        query=query_vector,
+        query_filter=query_filter,
+        limit=limit,
+        with_payload=True,
+    ).points
+
+    hits = []
+    for point in results:
+        hit = dict(point.payload)
+        hit["score"] = point.score
+        hits.append(hit)
+
+    return hits
+
+
 def delete_document(doc_id: str) -> int:
     """Deletes all chunks belonging to a given doc_id.
 
