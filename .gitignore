@@ -30,6 +30,7 @@ huggingface_cache/
 # --- Uploaded / processed documents (runtime data, not source-controlled) ---
 data/uploads/
 data/processed/
+data/vector_store/
 test_output_images/
 
 # --- Logs ---

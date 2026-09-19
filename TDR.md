@@ -114,6 +114,25 @@ TDR originally specified **Claude (vision + generation)** and **Voyage AI (embed
 
 ---
 
+## 2b. Qdrant Deployment Substitution (Documented Deviation)
+
+**Decision date:** 2026-09-19 (Stage 4 build)
+**Status:** Active for V1 build
+
+TDR originally specified **self-hosted Qdrant via Docker** (Section 2). Docker is not installed in the local build environment, so Qdrant's **local embedded mode** is used instead for V1.
+
+| Original (TDR spec) | Substituted with (V1 build) |
+|---|---|
+| Qdrant server, self-hosted via Docker (`qdrant/qdrant` container, accessed over HTTP) | Qdrant **embedded/local mode** — the same `qdrant-client` Python package, run in-process with `QdrantClient(path="...")`, persisting to a local folder instead of talking to a server |
+
+**Reasoning:** avoids requiring Docker to be installed just to build and test Stages 4–6 locally. It is still genuinely Qdrant — same client library, same collection/metadata-filtering API (`doc_id`, `page_num`, `type`, `doc_type` remain filterable exactly as specified) — only the deployment target changes.
+
+**What stays unchanged:** the collection schema, metadata filtering behavior, and every module's responsibilities (Section 4) are identical regardless of deployment mode. Retrieval code (Stage 5) is written against the `qdrant-client` API, which behaves the same whether backed by a local path or a remote server.
+
+**Swap-back plan:** the Qdrant client is only constructed in one place (`embedding/vector_store.py`). Switching to a Dockerized or hosted Qdrant server later means changing that one client initialization (`QdrantClient(path=...)` → `QdrantClient(url=..., api_key=...)`) — no other module needs to change.
+
+---
+
 ## 3. Data Schema (Core Contract Across All Stages)
 
 Every chunk — whether derived from text or an image — must conform to this schema before being embedded and stored. This is the single most important contract in the system; all modules must read/write it consistently.

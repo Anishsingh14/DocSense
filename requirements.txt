@@ -17,9 +17,12 @@ llama-index==0.11.14
 llama-index-embeddings-voyageai==0.2.3
 llama-index-vector-stores-qdrant==0.3.0
 
-# --- Embeddings (choose one or both) ---
-voyageai==0.2.3            # Voyage AI embeddings (paid API)
-sentence-transformers==3.1.1   # Local/free fallback (BGE models)
+# --- Embeddings ---
+# voyageai==0.2.3          # Voyage AI embeddings (paid API) — per TDR.md, not currently used.
+                           # DEVIATION: see Section 2a. Gemini embedding API (gemini-embedding-001)
+                           # is used instead for Stage 4 (embedding/embed_chunks.py).
+sentence-transformers==3.1.1   # Local/free fallback (BGE models) — available if Gemini
+                                # embeddings are ever unavailable/rate-limited
 
 # --- Vector database ---
 qdrant-client==1.11.2
@@ -33,7 +36,9 @@ anthropic==0.34.2          # Claude API (generation + vision) — per TDR.md, no
                            # (vision) and 6 (generation) use Gemini instead (see below). Kept
                            # here, unpinned from active use, so switching back later is a small
                            # change (swap the client in image_analyzer.py / answer_with_citations.py).
-google-genai==2.24.0       # Google Gemini API — vision (Stage 3) + generation (Stage 6) substitute for Claude
+google-genai==2.24.0       # Google Gemini API — vision (Stage 3), embeddings (Stage 4), and
+                           # generation (Stage 6): substitute for Claude (vision/generation) and
+                           # Voyage AI (embeddings)
 
 
 # --- Evaluation ---
