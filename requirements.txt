@@ -28,7 +28,13 @@ qdrant-client==1.11.2
 FlagEmbedding==1.2.11      # bge-reranker-v2-m3
 
 # --- LLM / Vision ---
-anthropic==0.34.2          # Claude API (generation + vision)
+anthropic==0.34.2          # Claude API (generation + vision) — per TDR.md, not currently used.
+                           # DEVIATION: user has no Claude/Anthropic billing set up. Stages 3
+                           # (vision) and 6 (generation) use Gemini instead (see below). Kept
+                           # here, unpinned from active use, so switching back later is a small
+                           # change (swap the client in image_analyzer.py / answer_with_citations.py).
+google-genai==2.24.0       # Google Gemini API — vision (Stage 3) + generation (Stage 6) substitute for Claude
+
 
 # --- Evaluation ---
 ragas==0.1.20

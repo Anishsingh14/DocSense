@@ -4,7 +4,7 @@
 **Version:** 1.0 (V1 Scope)
 **Companion document to:** PRD.md
 **Status:** Draft for Agentic Build (Kiro)
-**Last Updated:** 2026-09-15
+**Last Updated:** 2026-09-19 (Section 2a added — Gemini provider substitution documented)
 
 ---
 
@@ -79,15 +79,38 @@ Stage 7 (Evaluation Framework) runs parallel to Stages 5–6 during development.
 | DOCX parsing | `python-docx` | Standard, preserves structure |
 | TXT parsing | Native Python | No dependency needed |
 | Chunking | `LlamaIndex` `SemanticSplitterNodeParser` + custom regex splitter for legal mode | Semantic chunking improves retrieval accuracy over fixed-size chunking |
-| Embeddings | `voyage-3` (Voyage AI) — fallback: `BAAI/bge-large-en-v1.5` (local, free) | Strong retrieval-tuned embeddings; free fallback avoids API dependency during dev |
+| Embeddings | ~~`voyage-3` (Voyage AI)~~ → **Google Gemini embedding API (free tier)** — see Section 2a. Fallback: `BAAI/bge-large-en-v1.5` (local, free) remains available | Keeps embeddings on the same free provider as vision/generation; local fallback avoids any API dependency if preferred |
 | Vector database | `Qdrant` (self-hosted via Docker) | Strong metadata filtering (doc_id, page_num, type) needed for multi-mode retrieval |
 | Re-ranking | `bge-reranker-v2-m3` (local, free) | Improves precision of top-k retrieved chunks before generation |
-| Vision analysis | Claude (Sonnet) vision API | Strong instruction-following for factual, non-speculative image description |
-| LLM (generation) | Claude (Sonnet) for legal/precision mode, Claude (Haiku) for general/summary mode | Balances accuracy and cost |
+| Vision analysis | ~~Claude (Sonnet) vision API~~ → **Google Gemini API (free tier)** — see Section 2a | Free-tier alternative with no billing setup required; Claude remains the documented target for a future upgrade |
+| LLM (generation) | ~~Claude (Sonnet/Haiku)~~ → **Google Gemini API (free tier)** — see Section 2a | Same free-tier substitution as above, applied consistently across all LLM-calling stages |
 | Orchestration | `LlamaIndex` (`CitationQueryEngine` as base, customized) | Built specifically for citation-grounded Q&A |
 | Backend API | `FastAPI` | Async support, clean OpenAPI docs, easy to wire to a future frontend |
 | Evaluation | `RAGAS` (open-source) + custom scoring script | Automates retrieval/answer accuracy scoring |
 | Frontend (Stage 9 only) | `Streamlit` | Fastest path to a usable demo UI |
+
+---
+
+## 2a. Provider Substitution Decision (Documented Deviation)
+
+**Decision date:** 2026-09-19
+**Status:** Active for V1 build
+
+TDR originally specified **Claude (vision + generation)** and **Voyage AI (embeddings)** as paid API providers. Since Anthropic/Voyage billing was not set up at build time, the following substitution was made to keep the build moving without any cost:
+
+| Original (TDR spec) | Substituted with (V1 build) | Applies to |
+|---|---|---|
+| Claude (Sonnet) vision API | **Google Gemini API** (free tier, no credit card) | Stage 3 — Image Analysis |
+| `voyage-3` (Voyage AI) embeddings | **Google Gemini embedding API** (free tier) — local `BGE` remains an acceptable fallback | Stage 4 — Embedding & Storage |
+| Claude (Sonnet/Haiku) generation | **Google Gemini API** (free tier) | Stage 6 — Answer Generation |
+
+**Reasoning:** One consistent, free provider across every LLM-calling stage avoids a mid-build billing dependency and keeps the entire V1 pipeline cost-free to build and test.
+
+**What stays unchanged:** the prompt templates (Section 5), the data schema (Section 3), the image-filtering/cost-control logic (Section 6), and every module's responsibilities (Section 4) are identical regardless of provider. Only the actual API call inside each module (`image_analyzer.py`, `embed_chunks.py`, `answer_with_citations.py`) targets Gemini instead of Claude/Voyage.
+
+**Swap-back plan:** because the provider-specific API call is isolated inside each module rather than spread across the codebase, switching back to Claude/Voyage later (if billing is set up) should only require changing the API client and key inside these three files — not a redesign.
+
+**Credentials:** `GEMINI_API_KEY` is stored locally in `.env` (see `.env.example` for the template) and is never committed to GitHub (excluded via `.gitignore`) or shared in chat/agent conversations.
 
 ---
 
@@ -146,11 +169,13 @@ Every chunk — whether derived from text or an image — must conform to this s
 
 ### Stage 3 — Image Analysis (`ingestion/image_analyzer.py`)
 - Sends filtered images to the vision LLM with a strict, factual prompt (see PRD Section 9 for expected style)
+- **V1 build uses Google Gemini's vision API (free tier)** — see Section 2a for the documented substitution from Claude
 - Classifies image_type (chart/diagram/table/photo) either via prompt output or a lightweight heuristic
 - Converts vision output into a schema-conformant chunk (`type: "image"`)
+- The Gemini API call is isolated in this file so swapping back to Claude later is a contained change
 
 ### Stage 4 — Embedding & Storage (`embedding/`)
-- `embed_chunks.py`: batches all chunks (text + image) through the embedding model
+- `embed_chunks.py`: batches all chunks (text + image) through the embedding model. **V1 build uses Google Gemini's embedding API (free tier)** — see Section 2a; local `BGE` (`sentence-transformers`) remains an acceptable fallback if preferred
 - `vector_store.py`: handles Qdrant collection creation, upsert, and metadata indexing (doc_id, page_num, type, doc_type must be filterable fields)
 
 ### Stage 5 — Retrieval (`retrieval/`)
@@ -162,7 +187,7 @@ Every chunk — whether derived from text or an image — must conform to this s
 
 ### Stage 6 — Generation (`generation/`)
 - `prompt_templates.py`: holds the mode-specific and style-specific (full/summary) prompt templates described in PRD Section 9
-- `answer_with_citations.py`: assembles labeled context (`[Source N | Page X]`), calls the LLM, parses citations back against actual retrieved metadata (never trust the LLM's own page-number memory — always cross-check against what was actually retrieved)
+- `answer_with_citations.py`: assembles labeled context (`[Source N | Page X]`), calls the LLM, parses citations back against actual retrieved metadata (never trust the LLM's own page-number memory — always cross-check against what was actually retrieved). **V1 build uses Google Gemini's API (free tier)** — see Section 2a for the documented substitution from Claude
 - `confidence_check.py`: flags low-confidence answers (e.g., low similarity score on retrieved chunks, or LLM stating "not found")
 
 ### Stage 7 — Evaluation (`evaluation/`)
@@ -274,6 +299,8 @@ docsense/
 ├── data/
 │   ├── sample_docs/      # test documents (see Section 9)
 │   └── eval/             # evaluation Q&A set
+├── .env                  # local secrets (GEMINI_API_KEY) — gitignored, never committed
+├── .env.example           # template, safe to commit
 ├── requirements.txt
 └── README.md
 ```
