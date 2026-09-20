@@ -3,7 +3,6 @@
 
 **Version:** 1.0 (V1 Scope)
 **Companion document to:** PRD.md
-**Status:** Draft for Agentic Build (Kiro)
 **Last Updated:** 2026-09-20 (Section 2c added — chunking algorithm and doc_type classifier deviations documented)
 
 ---
