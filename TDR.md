@@ -4,7 +4,7 @@
 **Version:** 1.0 (V1 Scope)
 **Companion document to:** PRD.md
 **Status:** Draft for Agentic Build (Kiro)
-**Last Updated:** 2026-09-19 (Section 2a added — Gemini provider substitution documented)
+**Last Updated:** 2026-09-20 (Section 2c added — chunking algorithm and doc_type classifier deviations documented)
 
 ---
 
@@ -130,6 +130,37 @@ TDR originally specified **self-hosted Qdrant via Docker** (Section 2). Docker i
 **What stays unchanged:** the collection schema, metadata filtering behavior, and every module's responsibilities (Section 4) are identical regardless of deployment mode. Retrieval code (Stage 5) is written against the `qdrant-client` API, which behaves the same whether backed by a local path or a remote server.
 
 **Swap-back plan:** the Qdrant client is only constructed in one place (`embedding/vector_store.py`). Switching to a Dockerized or hosted Qdrant server later means changing that one client initialization (`QdrantClient(path=...)` → `QdrantClient(url=..., api_key=...)`) — no other module needs to change.
+
+---
+
+## 2c. Chunking Algorithm & Document-Type Classification (Documented Deviation)
+
+**Decision date:** 2026-09-20 (retroactively documented; decisions made during Stage 2 build)
+**Status:** Active for V1 build
+
+### Chunking algorithm substitution
+
+TDR originally specified LlamaIndex's `SemanticSplitterNodeParser` for general/multi-doc chunking (Section 2). That splitter determines chunk boundaries by embedding sentences and cutting where embedding distance jumps — which requires an embedding model at chunk time.
+
+| Original (TDR spec) | Substituted with (V1 build) |
+|---|---|
+| LlamaIndex `SemanticSplitterNodeParser` (embedding-based semantic chunking) | Custom, dependency-free structure-aware splitter (`chunking/text_chunker.py`): splits on paragraph boundaries, greedily packs paragraphs up to a target character size, falls back to sentence-level splitting for oversized paragraphs, and applies a small overlap between adjacent chunks to preserve cross-boundary context |
+
+**Reasoning:** Stage 4 (Embedding & Vector Storage) is where an embedding model is first introduced in this pipeline. Making Stage 2 (Chunking) depend on Stage 4's embedding model would create a backwards dependency and add embedding-API cost/latency to what should be a purely structural step. A structure-aware splitter keeps Stage 2 self-contained.
+
+**What stays unchanged:** the chunk schema (Section 3), the legal-mode clause-splitting approach (`legal_chunker.py`, unaffected by this decision), and every downstream module's responsibilities are identical regardless of chunking algorithm.
+
+**Revisit trigger:** if Stage 7 evaluation shows retrieval accuracy is weaker than expected on general/financial/research documents, semantic chunking (now feasible since Stage 4's embedding model exists) is the first thing to try as a replacement.
+
+### Document-type classification (undocumented in original TDR)
+
+TDR references `doc_type` (legal | financial | research | general) throughout — as a required chunk schema field (Section 3) and as a retrieval filter (Section 4, Stage 5: "legal: filter doc_type == legal") — but never specifies how a document's `doc_type` should actually be determined.
+
+**V1 build:** `chunking/doc_type_classifier.py` — a lightweight, dependency-free heuristic combining filename hints (e.g., "cuad", "contract", "arxiv") with keyword and structural-signal scoring (e.g., "Abstract"/"References" headings strongly indicate research papers, weighted higher than incidental keyword mentions) over the first few pages of extracted text. Defaults to `general` when no strong signal is found.
+
+**Reasoning:** this is a genuine gap in the original spec, not a substitution of a specified approach — `doc_type` needs to be determined somewhere before chunking/retrieval can use it, so this module fills that gap.
+
+**Revisit trigger:** if a document is ever misclassified during Stage 7 evaluation (e.g., a legal document routed to the general chunker), consider upgrading to an LLM-based classifier — the heuristic is isolated to this one module, so swapping it out doesn't touch the chunkers or any downstream stage.
 
 ---
 
