@@ -8,11 +8,15 @@ a schema-conformant chunk (type: "image") per TDR Section 3.
 DEVIATION FROM TDR: TDR Section 2 specifies Claude (Sonnet) for vision
 analysis. The user has no Anthropic billing set up; per explicit user
 instruction, this module uses Google Gemini's vision API instead
-(model: gemini-2.5-flash, chosen for low cost/fast latency on a
-factual-description task — swappable via GEMINI_VISION_MODEL).
-NOTE: gemini-2.0-flash was used initially but is now deprecated/shut
-down by Google; gemini-2.5-flash is the current stable equivalent
-tier as of this writing (confirmed via ai.google.dev/gemini-api/docs/models).
+(model: gemini-3.6-flash, swappable via GEMINI_VISION_MODEL). See TDR
+Section 2e for the full model-history log: gemini-2.0-flash was used
+initially but was deprecated/shut down; gemini-2.5-flash replaced it
+but is not accessible to newly-created Google Cloud projects/API keys
+(a 404 "no longer available to new users" error) — since TDR Section
+2d's multi-key rotation setup depends on newer keys working, this
+module now uses gemini-3.6-flash, confirmed (a) current/Stable and
+(b) supporting image input on a newly-created key via a direct API
+test, not assumption (see Section 2e).
 
 This is an isolated substitution: the prompt content, output schema,
 and downstream chunk contract are all unchanged from TDR's design.
@@ -51,10 +55,11 @@ from google import genai
 from google.genai import types as genai_types
 
 from chunking.text_chunker import Chunk
+from generation.gemini_key_rotation import call_with_key_rotation
 
 load_dotenv()
 
-GEMINI_VISION_MODEL = os.getenv("GEMINI_VISION_MODEL", "gemini-2.5-flash")
+GEMINI_VISION_MODEL = os.getenv("GEMINI_VISION_MODEL", "gemini-3.6-flash")
 
 ImageType = Literal["chart", "diagram", "table", "photo"]
 
@@ -153,30 +158,30 @@ def _call_vision_api(image_path: str) -> str:
 
     Raises on failure — caller (_analyze_single_image) is responsible
     for catching and converting to a skip.
+
+    Uses call_with_key_rotation (TDR Section 2d) so a 429
+    RESOURCE_EXHAUSTED on one Gemini project's free-tier quota
+    automatically retries against the next configured key rather than
+    failing this image outright.
     """
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "GEMINI_API_KEY is not set. Add it to a .env file in the "
-            "project root (see env.example)."
-        )
-
-    client = genai.Client(api_key=api_key)
-
     with open(image_path, "rb") as f:
         image_bytes = f.read()
 
     ext = os.path.splitext(image_path)[1].lower().lstrip(".")
     mime_type = f"image/{'jpeg' if ext == 'jpg' else ext}"
 
-    response = client.models.generate_content(
-        model=GEMINI_VISION_MODEL,
-        contents=[
-            genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-            _VISION_PROMPT,
-        ],
-    )
-    return response.text or ""
+    def _make_call(api_key: str) -> str:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=GEMINI_VISION_MODEL,
+            contents=[
+                genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                _VISION_PROMPT,
+            ],
+        )
+        return response.text or ""
+
+    return call_with_key_rotation(_make_call)
 
 
 def _parse_vision_response(raw_text: str) -> VisionAnalysisResult:

@@ -4,7 +4,7 @@
 **Version:** 1.0 (V1 Scope)
 **Companion document to:** PRD.md
 **Status:** Draft for Agentic Build (Kiro)
-**Last Updated:** 2026-09-19 (Section 2a added — Gemini provider substitution documented)
+**Last Updated:** 2026-09-22 (Section 2e added — Gemini model change from gemini-2.5-flash to gemini-3.6-flash for Stages 3 and 6 documented)
 
 ---
 
@@ -130,6 +130,109 @@ TDR originally specified **self-hosted Qdrant via Docker** (Section 2). Docker i
 **What stays unchanged:** the collection schema, metadata filtering behavior, and every module's responsibilities (Section 4) are identical regardless of deployment mode. Retrieval code (Stage 5) is written against the `qdrant-client` API, which behaves the same whether backed by a local path or a remote server.
 
 **Swap-back plan:** the Qdrant client is only constructed in one place (`embedding/vector_store.py`). Switching to a Dockerized or hosted Qdrant server later means changing that one client initialization (`QdrantClient(path=...)` → `QdrantClient(url=..., api_key=...)`) — no other module needs to change.
+
+---
+
+## 2c. Chunking Algorithm & Document-Type Classification (Documented Deviation)
+
+**Decision date:** 2026-09-20 (retroactively documented; decisions made during Stage 2 build)
+**Status:** Active for V1 build
+
+### Chunking algorithm substitution
+
+TDR originally specified LlamaIndex's `SemanticSplitterNodeParser` for general/multi-doc chunking (Section 2). That splitter determines chunk boundaries by embedding sentences and cutting where embedding distance jumps — which requires an embedding model at chunk time.
+
+| Original (TDR spec) | Substituted with (V1 build) |
+|---|---|
+| LlamaIndex `SemanticSplitterNodeParser` (embedding-based semantic chunking) | Custom, dependency-free structure-aware splitter (`chunking/text_chunker.py`): splits on paragraph boundaries, greedily packs paragraphs up to a target character size, falls back to sentence-level splitting for oversized paragraphs, and applies a small overlap between adjacent chunks to preserve cross-boundary context |
+
+**Reasoning:** Stage 4 (Embedding & Vector Storage) is where an embedding model is first introduced in this pipeline. Making Stage 2 (Chunking) depend on Stage 4's embedding model would create a backwards dependency and add embedding-API cost/latency to what should be a purely structural step. A structure-aware splitter keeps Stage 2 self-contained.
+
+**What stays unchanged:** the chunk schema (Section 3), the legal-mode clause-splitting approach (`legal_chunker.py`, unaffected by this decision), and every downstream module's responsibilities are identical regardless of chunking algorithm.
+
+**Revisit trigger:** if Stage 7 evaluation shows retrieval accuracy is weaker than expected on general/financial/research documents, semantic chunking (now feasible since Stage 4's embedding model exists) is the first thing to try as a replacement.
+
+### Document-type classification (undocumented in original TDR)
+
+TDR references `doc_type` (legal | financial | research | general) throughout — as a required chunk schema field (Section 3) and as a retrieval filter (Section 4, Stage 5: "legal: filter doc_type == legal") — but never specifies how a document's `doc_type` should actually be determined.
+
+**V1 build:** `chunking/doc_type_classifier.py` — a lightweight, dependency-free heuristic combining filename hints (e.g., "cuad", "contract", "arxiv") with keyword and structural-signal scoring (e.g., "Abstract"/"References" headings strongly indicate research papers, weighted higher than incidental keyword mentions) over the first few pages of extracted text. Defaults to `general` when no strong signal is found.
+
+**Reasoning:** this is a genuine gap in the original spec, not a substitution of a specified approach — `doc_type` needs to be determined somewhere before chunking/retrieval can use it, so this module fills that gap.
+
+**Revisit trigger:** if a document is ever misclassified during Stage 7 evaluation (e.g., a legal document routed to the general chunker), consider upgrading to an LLM-based classifier — the heuristic is isolated to this one module, so swapping it out doesn't touch the chunkers or any downstream stage.
+
+---
+
+## 2d. Multi-Key Rotation for Free-Tier Quota Management (Documented Deviation)
+
+**Decision date:** 2026-09-20 (Stage 6 build)
+**Status:** Active for V1 build/testing only — see "Not a production solution" below
+
+### The problem
+
+Google's Gemini free tier caps `gemini-2.5-flash` at 20 `generate_content` requests per day, and this quota is enforced **per Google Cloud project**, not per API key or per Google account. Stage 6 testing exhausted the single-project quota after only a handful of test cases (each question makes one generation call, on top of the calls already made during Stage 3 image analysis and any repeated Stage 4/6 testing in the same day).
+
+### The substitution
+
+| Original setup | V1 build (testing/dev only) |
+|---|---|
+| One `GEMINI_API_KEY`, one Google Cloud project, 20 requests/day | Up to 7 independent Google Cloud projects, each with its own API key (`GEMINI_API_KEY` through `GEMINI_API_KEY_7` in `.env`), giving up to 140 requests/day combined |
+
+**Implementation:** `generation/gemini_key_rotation.py` — a single shared helper, `call_with_key_rotation()`, that every Gemini call site (`ingestion/image_analyzer.py` — Stage 3, `embedding/embed_chunks.py` — Stage 4, `generation/answer_with_citations.py` — Stage 6) now routes through. Each call site still constructs its own `genai.Client` and makes its own specific API call (vision, embedding, or generation) — the helper only supplies which key to try next. On a `429 RESOURCE_EXHAUSTED` error, it automatically retries the same call with the next configured key, cycling through all configured keys before giving up. Any non-quota error (e.g., a malformed request) is NOT retried with a different key, since a different key wouldn't fix a bad request — it's raised immediately.
+
+**Reasoning:** keeping the rotation logic in one small, shared file — rather than duplicating retry logic in each of the three call sites — satisfies "small, contained change, not spread across the codebase." Each call site's own code changed only enough to delegate its actual API call through the shared helper.
+
+**What stays unchanged:** every module's responsibilities, prompt content, output schema, and the individual Gemini API calls themselves (vision, embedding, generation) are all unchanged. Only *which key* is used, and the retry-on-429 behavior, are new.
+
+### Not a production solution
+
+This is explicitly a **testing/development-volume workaround**, not a scalable or production-grade rate-limiting strategy. It works because V1's testing volume (a handful of manual test-script runs per day) fits within 140 requests/day. It does NOT address:
+- Real production traffic, which would need a paid Gemini tier (or Claude/Voyage, per Sections 2a/2b) with proper rate limits, not multiple free-tier projects
+- Concurrent/parallel request handling, load balancing, or per-key usage tracking
+- Any guarantee that Google's terms of service permit this pattern at scale (fine for personal development/testing volume; not something to carry into a real deployment)
+
+**Revisit trigger:** before any production deployment, or before Stage 8's API layer is exposed to real (non-test) traffic, replace this with a proper paid-tier plan or the documented Claude/Voyage swap-back (Sections 2a/2b) — key rotation across free-tier projects should not be the production answer key management strategy.
+
+---
+
+## 2e. Gemini Model Change: gemini-2.5-flash → gemini-3.6-flash (Documented Deviation)
+
+**Decision date:** 2026-09-22 (Stage 6 build/testing)
+**Status:** Active for V1 build — applies to Stage 3 (vision) and Stage 6 (generation) only. Stage 4 (embeddings, `gemini-embedding-001`) is a separate model family and is explicitly NOT changed by this decision — see "Scope" below.
+
+### The problem
+
+Section 2d's multi-key rotation setup added 6 new Google Cloud projects/API keys specifically to get around `gemini-2.5-flash`'s 20-requests/day free-tier quota. During live Stage 6 testing, calls made with the newer keys failed with:
+
+```
+404 NOT_FOUND: This model models/gemini-2.5-flash is no longer available to
+new users. Please update your code to use models/gemini-3.6-flash for the
+latest features and improvements.
+```
+
+This meant rotation had nowhere useful to go on a 429 — the newer keys couldn't serve the request at all, for an unrelated reason (new-project model eligibility, not quota), which defeated the entire point of Section 2d's setup.
+
+### Model history for this project (full log, since this is the second model change)
+
+| Model | Status | Why it stopped being used |
+|---|---|---|
+| `gemini-2.0-flash` | Shut down by Google | Used initially in Stage 3; deprecated before Stage 3 testing was complete — replaced with `gemini-2.5-flash` |
+| `gemini-2.5-flash` | Stable, but not available to new API keys/projects | Used through Stages 3 and 6 build; blocks the 6 newer keys added in Section 2d with a 404, defeating multi-key rotation |
+| `gemini-3.6-flash` | **Current — adopted here** | Confirmed Stable (not preview/experimental) via `ai.google.dev/gemini-api/docs/models/gemini-3.6-flash`; confirmed to support both text and image input (`Supported data types: Text, Image, Video, Audio, and PDF`); confirmed actually callable — via a direct live API test, not assumption — on one of the newer keys (`GEMINI_API_KEY_2`/`GEMINI_API_KEY_3`) for both a text-only call and an image+text (vision) call |
+
+### The change
+
+| File | Old default | New default |
+|---|---|---|
+| `ingestion/image_analyzer.py` (`GEMINI_VISION_MODEL`) | `gemini-2.5-flash` | `gemini-3.6-flash` |
+| `generation/answer_with_citations.py` (`GENERATION_MODEL`) | `gemini-2.5-flash` | `gemini-3.6-flash` |
+
+**Scope — what is NOT changed:** `embedding/embed_chunks.py` (Stage 4) continues to use `gemini-embedding-001` unchanged. `gemini-3.6-flash` is a text/vision generation model, not an embedding model, so it is not a substitute for Stage 4's embedding model family — this was a deliberate scope decision (Stage 4 is left as-is until/unless it independently hits an access problem, at which point its embedding model choice would be evaluated on its own terms, not swapped to match Stage 3/6 by default).
+
+**What stays unchanged:** the prompt content, the citation cross-check logic (Section 6, this file), the vision prompt/output-parsing format (Stage 3), the chunk/answer schemas (Section 3), and every module's responsibilities — this is purely a model-string swap inside two `os.getenv(..., default)` calls, both already designed to be overridable via `GEMINI_VISION_MODEL` / `GEMINI_GENERATION_MODEL` env vars without a code change.
+
+**Revisit trigger:** if `gemini-3.6-flash` is ever deprecated or restricted the same way `gemini-2.0-flash` and `gemini-2.5-flash` were, check `ai.google.dev/gemini-api/docs/models` for the current Stable model in the same tier before swapping again — and verify new-key access with a direct live test (not just checking the docs list it) before adopting, per the process followed here.
 
 ---
 
