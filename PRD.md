@@ -2,9 +2,7 @@
 ## Project: DocSense — Unified Document Intelligence & Q&A Platform
 
 **Version:** 1.0 (V1 Scope)
-**Owner:** [Your Name]
-**Status:** Draft for Agentic Build (Kiro)
-**Last Updated:** 2026-09-15
+**Owner:** Anish Singh
 
 ---
 
