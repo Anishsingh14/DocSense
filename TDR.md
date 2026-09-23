@@ -236,6 +236,29 @@ This meant rotation had nowhere useful to go on a 429 — the newer keys couldn'
 
 ---
 
+## 2f. Known Limitation: multi_doc Mode Can Exclude a Requested Document Entirely (Flagged, Not Fixed)
+
+**Flagged date:** 2026-09-24 (Stage 6 manual test run)
+**Status:** Known limitation — deliberately deferred to Stage 7 evaluation, not fixed now.
+
+### The problem
+
+In `multi_doc` mode, `retrieve_and_rerank()` retrieves candidates across all requested `doc_id`s, then reranks and returns a single global top-k (default 5) across all of them combined (`retrieval/reranker.py`, `retrieval/pipeline.py`). There is no guarantee that every requested document contributes at least one chunk to that top-k — if one document's chunks all score lower than another document's, that document can be completely absent from the final answer, even though the user explicitly asked to compare it.
+
+**Observed:** manually testing the multi_doc case ("What do these contracts say about termination?" across `CUAD_GRIDIRONBIONUTRIENTS_INC...SUPPLY_AGREEMENT`, `CUAD_XLITECHNOLOGIES_INC...STRATEGIC_ALLIANCE_A`, and `SampleServices_MSA_Contract`), all 5 returned sources came from only 2 of the 3 requested documents — `CUAD_XLITECHNOLOGIES_INC...STRATEGIC_ALLIANCE_A` was entirely absent from the answer. The same 3-document query already showed this pattern in Stage 5's own test results, confirming this is a retrieval/ranking behavior, not something introduced by Stage 6's generation or citation logic.
+
+### Why this is deferred, not fixed now
+
+This is a ranking-policy question (should multi_doc guarantee per-document representation, and if so how many chunks minimum per document, at what cost to overall relevance ranking), not a bug with an obvious one-line fix. Stage 7's evaluation framework is the right place to measure how often this actually degrades answer quality across a labeled test set, before choosing a fix.
+
+**Candidate fixes to evaluate during Stage 7** (not yet implemented, not yet decided between):
+- Widen the multi_doc candidate pool before reranking (retrieve more per-document candidates, so a lower-scoring document still has chunks in play).
+- Guarantee at least 1 chunk per requested `doc_id` in the final top-k (e.g., reserve one slot per document, fill remaining slots by global rank).
+
+**Revisit trigger:** during Stage 7 evaluation, specifically test multi_doc queries against documents with uneven chunk-relevance scores (mirroring the case above) and measure how often a requested document is fully excluded from the final answer. If this happens often enough to measurably hurt multi_doc accuracy on the labeled eval set, implement one of the candidate fixes above before Stage 8.
+
+---
+
 ## 3. Data Schema (Core Contract Across All Stages)
 
 Every chunk — whether derived from text or an image — must conform to this schema before being embedded and stored. This is the single most important contract in the system; all modules must read/write it consistently.
