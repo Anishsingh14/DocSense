@@ -114,48 +114,44 @@ def embed_query(query_text: str) -> List[float]:
 
 
 def _embed_texts(texts: List[str], task_type: TaskType) -> List[List[float]]:
-    """Embeds a batch of texts, trying Gemini first and falling back
-    to a local model on any failure (missing key, network/quota error).
+    """Embeds a batch of texts, trying Gemini (rotating across all
+    configured keys — TDR Section 2d) first, then falling back to a
+    local model only if every configured key is exhausted/unavailable
+    (missing key entirely, network error, or all keys 429'd).
     """
-    api_key = os.getenv("GEMINI_API_KEY")
-    if api_key:
-        try:
-            return _embed_with_gemini(texts, task_type, api_key)
-        except Exception as exc:
-            print(
-                f"WARNING: Gemini embedding call failed ({type(exc).__name__}: {exc}). "
-                f"Falling back to local embedding model ({LOCAL_FALLBACK_MODEL})."
-            )
-    else:
+    try:
+        return _embed_with_gemini(texts, task_type)
+    except Exception as exc:
         print(
-            "WARNING: GEMINI_API_KEY not set. Using local embedding model "
-            f"({LOCAL_FALLBACK_MODEL}) instead."
+            f"WARNING: Gemini embedding call failed on all configured "
+            f"keys ({type(exc).__name__}: {exc}). Falling back to local "
+            f"embedding model ({LOCAL_FALLBACK_MODEL})."
         )
+        return _embed_with_local_model(texts)
 
-    return _embed_with_local_model(texts)
 
-
-def _embed_with_gemini(
-    texts: List[str], task_type: TaskType, api_key: str
-) -> List[List[float]]:
+def _embed_with_gemini(texts: List[str], task_type: TaskType) -> List[List[float]]:
     from google import genai
     from google.genai import types as genai_types
 
-    client = genai.Client(api_key=api_key)
+    from generation.gemini_key_rotation import call_with_key_rotation
 
-    result = client.models.embed_content(
-        model=GEMINI_EMBEDDING_MODEL,
-        contents=texts,
-        config=genai_types.EmbedContentConfig(
-            task_type=task_type,
-            output_dimensionality=EMBEDDING_OUTPUT_DIMENSIONALITY,
-        ),
-    )
+    def _make_call(api_key: str) -> List[List[float]]:
+        client = genai.Client(api_key=api_key)
+        result = client.models.embed_content(
+            model=GEMINI_EMBEDDING_MODEL,
+            contents=texts,
+            config=genai_types.EmbedContentConfig(
+                task_type=task_type,
+                output_dimensionality=EMBEDDING_OUTPUT_DIMENSIONALITY,
+            ),
+        )
+        # gemini-embedding-001 returns one embedding per input string
+        # (unlike gemini-embedding-2, which aggregates multi-part
+        # input — see this module's docstring for why -001 was chosen).
+        return [list(e.values) for e in result.embeddings]
 
-    # gemini-embedding-001 returns one embedding per input string
-    # (unlike gemini-embedding-2, which aggregates multi-part input —
-    # see this module's docstring for why -001 was chosen).
-    return [list(e.values) for e in result.embeddings]
+    return call_with_key_rotation(_make_call)
 
 
 def _embed_with_local_model(texts: List[str]) -> List[List[float]]:
