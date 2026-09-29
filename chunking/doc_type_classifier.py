@@ -1,23 +1,4 @@
-"""doc_type_classifier.py — Stage 2 support module.
 
-Assigns a `doc_type` (legal | financial | research | general) to a
-document, which determines which chunker (text_chunker.py vs
-legal_chunker.py) is used and is stored on every resulting chunk per
-the TDR Section 3 schema.
-
-DEVIATION FROM TDR: neither PRD.md nor TDR.md specifies how `doc_type`
-should be determined — it's referenced only as a schema field and as
-a retrieval filter (TDR Section 4, Stage 5 "legal: filter
-doc_type == legal"). This module fills that gap with a lightweight,
-dependency-free heuristic (filename hints + keyword scoring over the
-first few pages of extracted text). It intentionally does NOT call
-any LLM/embedding model, to keep Stage 2 self-contained.
-
-If classification accuracy turns out to matter more than expected
-(e.g., misrouting a legal doc to the general chunker), this is the
-one place to upgrade later — e.g., to an LLM-based classifier — without
-touching the chunkers themselves.
-"""
 
 from __future__ import annotations
 
