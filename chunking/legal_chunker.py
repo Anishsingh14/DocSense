@@ -1,18 +1,4 @@
-"""legal_chunker.py — Stage 2 module.
 
-Regex/heading-based clause splitting for legal mode. Detects section
-and article headings (e.g., "Section 4.2", "Article 9", "4.2
-Termination") and uses them as chunk boundaries, tagging each
-resulting chunk with the detected `section` label. This gives legal
-mode exact, citable clause boundaries instead of size-based chunks.
-
-Falls back to text_chunker.py's structure-aware splitting for any
-stretch of text with no detected heading (e.g., a preamble before the
-first numbered section) and for documents where no headings are found
-at all, so legal_chunker.py never produces zero chunks.
-
-Output: list of chunk dicts conforming to the TDR Section 3 schema.
-"""
 
 from __future__ import annotations
 
