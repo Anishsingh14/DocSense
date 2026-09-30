@@ -1,4 +1,16 @@
+"""Manual test script for Stage 2 — Chunking.
 
+Run from the project root:
+    python -m chunking.test_stage2_manual
+
+Or target a single file:
+    python -m chunking.test_stage2_manual data/sample_docs/SampleServices_MSA_Contract.pdf
+
+For each document: runs Stage 1 ingestion, then Stage 2 chunking, and
+prints the detected doc_type, chunk count, and a preview of each
+chunk (chunk_id, page_num, section, text preview) so you can verify
+chunk boundaries and section labels look right.
+"""
 
 from __future__ import annotations
 
