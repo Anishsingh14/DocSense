@@ -1,32 +1,4 @@
-"""text_chunker.py — Stage 2 module.
 
-Structure-aware chunking for general/multi-doc/financial/research
-mode (i.e., anything not routed to legal_chunker.py).
-
-DEVIATION FROM TDR: TDR Section 2 specifies LlamaIndex's
-`SemanticSplitterNodeParser` for this module. That splitter determines
-chunk boundaries by embedding sentences and cutting where embedding
-distance jumps — which requires an embedding model at chunk time.
-Stage 4 (Embedding & Vector Storage) is where the embedding model is
-actually introduced; depending on it here would create a backwards
-dependency (Stage 2 -> Stage 4) and add embedding-API cost/latency to
-a purely structural step.
-
-Per user decision, this module instead uses a dependency-free,
-structure-aware splitter: it splits on paragraph boundaries first,
-then greedily packs paragraphs into chunks up to a target character
-size, falling back to sentence-level splitting for any single
-paragraph that exceeds the target size on its own. Adjacent chunks
-overlap by a small amount to preserve context across chunk
-boundaries, which is the main retrieval-quality benefit semantic
-chunking would otherwise provide.
-
-REVISIT: once Stage 4's embedding model exists, consider swapping this
-for true semantic chunking (e.g., LlamaIndex's SemanticSplitterNodeParser)
-if retrieval accuracy in Stage 7 evaluation shows it's needed.
-
-Output: list of chunk dicts conforming to the TDR Section 3 schema.
-"""
 
 from __future__ import annotations
 
