@@ -1,6 +1,6 @@
 """doc_type_classifier.py — Stage 2 support module.
 
-Assigns a `doc_type` (legal | financial | research | general) to a
+This module assigns a `doc_type` (legal | financial | research | general) to a
 document, which determines which chunker (text_chunker.py vs
 legal_chunker.py) is used and is being stored on every resulting chunk per
 the TDR Section 3 schema.
