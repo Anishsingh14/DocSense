@@ -11,7 +11,7 @@ a retrieval filter (TDR Section 4, Stage 5 "legal: filter
 doc_type == legal"). This module fills that gap with a lightweight,
 dependency-free heuristic (filename hints + keyword scoring over the
 first few pages of extracted text). It intentionally does NOT call
-any LLM/embedding model, to keep Stage 2 self-contained.
+any LLM/embedding model, to keep Stage 2 self-contained efficiently.
 
 If classification accuracy turns out to matter more than expected
 (e.g., misrouting a legal doc to the general chunker), this is the
