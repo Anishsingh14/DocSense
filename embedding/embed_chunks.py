@@ -1,6 +1,6 @@
 """embed_chunks.py — Stage 4 module.
 
-Batches all chunks (text + image-derived, both share the same schema
+This module batches all chunks (text + image-derived, both share the same schema
 per TDR Section 3) through an embedding model, attaching a numeric
 vector to each chunk.
 
