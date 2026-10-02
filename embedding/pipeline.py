@@ -1,7 +1,7 @@
 """pipeline.py — Stage 4 orchestrator.
 
 Tthis module tkes schema-conformant chunks (text chunks from Stage 2, image
-chunks from Stage 3) and runs them through embedding + vector storage.
+chunks from Stage 3) and runs them through embedding + vector storage purposefully.
 """
 
 from __future__ import annotations
