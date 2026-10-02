@@ -1,6 +1,6 @@
 """vector_store.py — Stage 4 module.
 
-This module handles Qdrant collection creation, upsert, and metadata indexing.
+This module handles the Qdrant collection creation, upsert and metadata indexing.
 `doc_id`, `page_num`, `type`, and `doc_type` are indexed as filterable
 fields, per TDR Section 4, so Stage 5's mode-aware retrieval
 (single_doc / multi_doc / legal) can filter efficiently.
@@ -14,7 +14,7 @@ local folder rather than talking to a server over HTTP.
 The Qdrant client is constructed in exactly one place in this module
 (`_get_client`) so that switching to a Dockerized or hosted Qdrant
 server later is a one-line change, isolated from every other module
-that imports from here.
+that imports from here respectively.
 """
 
 from __future__ import annotations
