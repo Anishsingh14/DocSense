@@ -1,6 +1,6 @@
 """vector_store.py — Stage 4 module.
 
-Handles Qdrant collection creation, upsert, and metadata indexing.
+This module handles Qdrant collection creation, upsert, and metadata indexing.
 `doc_id`, `page_num`, `type`, and `doc_type` are indexed as filterable
 fields, per TDR Section 4, so Stage 5's mode-aware retrieval
 (single_doc / multi_doc / legal) can filter efficiently.
