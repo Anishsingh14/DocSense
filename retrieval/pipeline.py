@@ -1,6 +1,6 @@
 """pipeline.py — Stage 5 orchestrator.
 
-Combines retriever.py (mode-aware candidate retrieval) and
+This module combines retriever.py (mode-aware candidate retrieval) and
 reranker.py (precision re-scoring) into a single call, producing the
 final chunk set that Stage 6 will use to generate a cited answer.
 """
