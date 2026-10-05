@@ -7,7 +7,7 @@ populated:
 Then run this script:
     python -m retrieval.test_stage5_manual
 
-Runs a handful of representative questions through all three modes
+This module runs a handful of representative questions through all three modes
 (single_doc, multi_doc, legal) against the already-embedded sample
 documents, printing the top reranked chunks with their page numbers
 and scores, so you can manually verify the right chunk/page comes
