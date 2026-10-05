@@ -8,7 +8,7 @@ Mode-aware retrieval per TDR Section 4:
 
 This module handles the FILTERING/candidate-generation step (vector
 similarity + metadata filters). Precision re-ranking of the resulting
-candidates is a separate step, handled by reranker.py — retriever.py
+candidates is a separate step, which is handled by reranker.py — retriever.py
 intentionally over-fetches (larger top-k than what's finally needed)
 so reranker.py has enough candidates to re-score meaningfully.
 """
