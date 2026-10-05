@@ -11,7 +11,7 @@ This module runs a handful of representative questions through all three modes
 (single_doc, multi_doc, legal) against the already-embedded sample
 documents, printing the top reranked chunks with their page numbers
 and scores, so you can manually verify the right chunk/page comes
-back for each question.
+back for each question respectively.
 """
 
 from __future__ import annotations
