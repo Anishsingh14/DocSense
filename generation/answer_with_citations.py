@@ -1,6 +1,6 @@
 """answer_with_citations.py — Stage 6 module.
 
-Assembles labeled context from Stage 5's reranked chunks, calls the
+This model assembles labeled context from Stage 5's reranked chunks, calls the
 LLM to generate an answer, and parses citations back against the
 ACTUAL retrieved chunk metadata — never trusting the LLM's own memory
 of page numbers (TDR Section 6: "the generation layer must cross-check
