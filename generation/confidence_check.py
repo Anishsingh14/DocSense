@@ -1,6 +1,6 @@
 """confidence_check.py — Stage 6 module.
 
-Flags low-confidence answers, per TDR Section 4: "e.g., low similarity
+This module flags low-confidence answers, per TDR Section 4: "e.g., low similarity
 score on retrieved chunks, or LLM stating 'not found'".
 
 DEVIATION FROM TDR: TDR requires a per-source confidence level
