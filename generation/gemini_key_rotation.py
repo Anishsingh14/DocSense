@@ -17,7 +17,7 @@ development-volume workaround (Gemini's free-tier quota is enforced
 per Google Cloud project, not per account, so multiple projects yield
 multiple independent quota pools) — NOT a production-scale rate-limit
 or load-balancing solution. See Section 2d for full reasoning and
-what stays unchanged.
+what stays unchanged respectively.
 """
 
 from __future__ import annotations
