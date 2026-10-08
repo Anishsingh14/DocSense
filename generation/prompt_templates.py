@@ -2,7 +2,7 @@
 
 This module holds the mode-specific (single_doc/multi_doc/legal) and style-specific
 (full/summary) prompt templates described in TDR Section 5 and PRD
-Section 9.
+Section 9 respectively.
 
 Each retrieved chunk is labeled as [Source N | ...] in the assembled
 context, where N is the chunk's position in the (already reranked)
