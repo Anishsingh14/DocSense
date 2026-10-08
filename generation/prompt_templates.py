@@ -1,6 +1,6 @@
 """prompt_templates.py — Stage 6 module.
 
-Holds the mode-specific (single_doc/multi_doc/legal) and style-specific
+This module holds the mode-specific (single_doc/multi_doc/legal) and style-specific
 (full/summary) prompt templates described in TDR Section 5 and PRD
 Section 9.
 
