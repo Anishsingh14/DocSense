@@ -2,7 +2,7 @@
 
 This module batches all chunks (text + image-derived, both share the same schema
 per TDR Section 3) through an embedding model, attaching a numeric
-vector to each chunk.
+vector to each chunk respectively.
 
 DEVIATION FROM TDR (see TDR.md Section 2a): TDR originally specified
 `voyage-3` (Voyage AI) with a local BGE fallback. Per the user's
