@@ -12,7 +12,7 @@ chunk's own metadata (known to us already, from Stage 5), not from
 anything the LLM has to remember or infer. answer_with_citations.py
 maps the LLM's "[Source N]" references back to real metadata after
 generation — see that module for why this matters (TDR Section 6:
-"never trust the LLM's own page-number memory").
+"never trust the LLM's own page-number memory only").
 
 FIXED BUG (found via manual Stage 6 legal-mode test run — see
 answer_with_citations.py's "FIXED BUGS" #3): the legal and multi_doc
