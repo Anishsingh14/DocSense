@@ -39,10 +39,10 @@ every page) is analyzed once and the same description is reused for
 every occurrence.
 
 Error handling (TDR Section 7): "Vision API failure on an image ->
-log and skip that image; do not fail the entire document processing
+logs and skip that image; do not fail the entire document processing
 job." Implemented in analyze_images() — a failure on one image
 produces no chunk for that image, but does not raise or abort
-processing of the remaining images.
+processing of the remaining images purposefully.
 """
 
 from __future__ import annotations
