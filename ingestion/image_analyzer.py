@@ -3,7 +3,7 @@
 This module sends the filtered, non-decorative images (from image_extractor.py) to a
 vision-capable LLM with a strict, factual prompt, classifies the
 image_type (chart/diagram/table/photo), and converts the result into
-a schema-conformant chunk (type: "image") per TDR Section 3.
+a schema-conformant chunk (type: "image") per TDR Section 3 respectively.
 
 DEVIATION FROM TDR: TDR Section 2 specifies Claude (Sonnet) for vision
 analysis. The user has no Anthropic billing set up; per explicit user
