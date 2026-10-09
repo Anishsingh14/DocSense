@@ -1,6 +1,6 @@
 """image_analyzer.py — Stage 3 module.
 
-Sends filtered, non-decorative images (from image_extractor.py) to a
+This module sends filtered, non-decorative images (from image_extractor.py) to a
 vision-capable LLM with a strict, factual prompt, classifies the
 image_type (chart/diagram/table/photo), and converts the result into
 a schema-conformant chunk (type: "image") per TDR Section 3.
