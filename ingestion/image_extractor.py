@@ -26,7 +26,7 @@ Notes:
   stage can deduplicate repeated images across pages/documents before
   calling the vision API. Deduplication logic itself belongs to
   Stage 3 (image_analyzer.py), not here — this module only computes
-  and exposes the hash.
+  and exposes the hash respectively.
 """
 
 from __future__ import annotations
