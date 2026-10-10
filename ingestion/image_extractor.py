@@ -2,7 +2,7 @@
 
 This module extracts embedded images per page from PDF files using PyMuPDF, and
 filters out decorative images below a size threshold before they are
-passed downstream (to Stage 3's vision analysis).
+passed downstream (to the Stage 3's vision analysis).
 
 Contract (per TDR Section 4 & Section 6 "Cost control on vision calls"):
     Returns a list of dicts:
