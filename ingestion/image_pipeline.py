@@ -1,6 +1,6 @@
 """image_pipeline.py — Stage 3 orchestrator.
 
-Takes a Stage 1 IngestedDocument (from ingestion/pipeline.py) plus its
+This takes a Stage 1 IngestedDocument (from ingestion/pipeline.py) plus its
 detected doc_type (from chunking/doc_type_classifier.py) and produces
 schema-conformant image chunks via image_analyzer.py.
 
