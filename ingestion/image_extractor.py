@@ -1,6 +1,6 @@
 """image_extractor.py — Stage 1 module.
 
-Extracts embedded images per page from PDF files using PyMuPDF, and
+This module extracts embedded images per page from PDF files using PyMuPDF, and
 filters out decorative images below a size threshold before they are
 passed downstream (to Stage 3's vision analysis).
 
