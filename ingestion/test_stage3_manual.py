@@ -9,7 +9,7 @@ Or target a single file:
 Requires GEMINI_API_KEY to be set in a .env file in the project root
 (see env.example) — this script makes real API calls.
 
-This for each document: runs Stage 1 ingestion, then Stage 3 image
+This module, for each document: first runs Stage 1 ingestion, then Stage 3 image
 analysis, and prints the resulting image chunks (page_num, image_type,
 description, source_image_path) plus a schema-conformance check.
 Documents with no extracted images are skipped with a note.
