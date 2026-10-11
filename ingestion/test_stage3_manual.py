@@ -12,7 +12,7 @@ Requires GEMINI_API_KEY to be set in a .env file in the project root
 This module, for each document: first runs Stage 1 ingestion, then Stage 3 image
 analysis, and prints the resulting image chunks (page_num, image_type,
 description, source_image_path) plus a schema-conformance check.
-Documents with no extracted images are skipped with a note.
+Documents with no extracted images are skipped with a note purposefully.
 """
 
 from __future__ import annotations
