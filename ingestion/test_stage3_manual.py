@@ -6,7 +6,7 @@ Run from the project root:
 Or target a single file:
     python -m ingestion.test_stage3_manual data/sample_docs/Acme_Corp_Annual_Report.pdf
 
-Requires GEMINI_API_KEY to be set in a .env file in the project root
+This requires GEMINI_API_KEY to be set in a .env file in the project root
 (see env.example) — this script makes real API calls.
 
 This module, for each document: first runs Stage 1 ingestion, then Stage 3 image
