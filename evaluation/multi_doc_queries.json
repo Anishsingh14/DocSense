@@ -1,0 +1,106 @@
+[
+  {
+    "query_id": "md_01",
+    "question": "What do these contracts say about termination?",
+    "doc_ids": [
+      "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT",
+      "CUAD_XLITECHNOLOGIES_INC_12_02_2015-EX-10_02-STRATEGIC_ALLIANCE_A",
+      "SampleServices_MSA_Contract"
+    ]
+  },
+  {
+    "query_id": "md_02",
+    "question": "What do these contracts say about governing law?",
+    "doc_ids": [
+      "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT",
+      "CUAD_TRANSMONTAIGNEPARTNERSLLC_03_13_2020-EX-10_9-SERVICES_AGREEM"
+    ]
+  },
+  {
+    "query_id": "md_03",
+    "question": "Who are the parties in these contracts?",
+    "doc_ids": [
+      "CUAD_XLITECHNOLOGIES_INC_12_02_2015-EX-10_02-STRATEGIC_ALLIANCE_A",
+      "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT",
+      "CUAD_TRANSMONTAIGNEPARTNERSLLC_03_13_2020-EX-10_9-SERVICES_AGREEM"
+    ]
+  },
+  {
+    "query_id": "md_04",
+    "question": "What do these contracts say about confidentiality?",
+    "doc_ids": [
+      "CUAD_XLITECHNOLOGIES_INC_12_02_2015-EX-10_02-STRATEGIC_ALLIANCE_A",
+      "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT",
+      "SampleServices_MSA_Contract"
+    ]
+  },
+  {
+    "query_id": "md_05",
+    "question": "How do these agreements handle indemnification?",
+    "doc_ids": [
+      "CUAD_XLITECHNOLOGIES_INC_12_02_2015-EX-10_02-STRATEGIC_ALLIANCE_A",
+      "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT"
+    ]
+  },
+  {
+    "query_id": "md_06",
+    "question": "What do these contracts say about assignment of the agreement?",
+    "doc_ids": [
+      "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT",
+      "CUAD_TRANSMONTAIGNEPARTNERSLLC_03_13_2020-EX-10_9-SERVICES_AGREEM",
+      "SampleServices_MSA_Contract"
+    ]
+  },
+  {
+    "query_id": "md_07",
+    "question": "What are the effective dates or agreement dates of these contracts?",
+    "doc_ids": [
+      "CUAD_XLITECHNOLOGIES_INC_12_02_2015-EX-10_02-STRATEGIC_ALLIANCE_A",
+      "CUAD_TRANSMONTAIGNEPARTNERSLLC_03_13_2020-EX-10_9-SERVICES_AGREEM"
+    ]
+  },
+  {
+    "query_id": "md_08",
+    "question": "Compare the financial performance and revenue trends described in these documents.",
+    "doc_ids": [
+      "Acme_Corp_Annual_Report",
+      "Retrieval_Augmented_QA_Systems"
+    ]
+  },
+  {
+    "query_id": "md_09",
+    "question": "What do these sources say about precision or accuracy of a process or system?",
+    "doc_ids": [
+      "Retrieval_Augmented_QA_Systems",
+      "SampleServices_MSA_Contract"
+    ]
+  },
+  {
+    "query_id": "md_10",
+    "question": "What do these documents say about legal disputes, litigation, or governing jurisdiction?",
+    "doc_ids": [
+      "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT",
+      "CUAD_TRANSMONTAIGNEPARTNERSLLC_03_13_2020-EX-10_9-SERVICES_AGREEM",
+      "CUAD_XLITECHNOLOGIES_INC_12_02_2015-EX-10_02-STRATEGIC_ALLIANCE_A",
+      "SampleServices_MSA_Contract"
+    ]
+  },
+  {
+    "query_id": "md_11",
+    "question": "What products, services, or subject matter does each of these documents describe?",
+    "doc_ids": [
+      "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT",
+      "Acme_Corp_Annual_Report",
+      "Retrieval_Augmented_QA_Systems"
+    ]
+  },
+  {
+    "query_id": "md_12",
+    "question": "What do these contracts say about liability or limitation of liability?",
+    "doc_ids": [
+      "SampleServices_MSA_Contract",
+      "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT",
+      "CUAD_XLITECHNOLOGIES_INC_12_02_2015-EX-10_02-STRATEGIC_ALLIANCE_A"
+    ]
+  }
+]

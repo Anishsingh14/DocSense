@@ -103,17 +103,59 @@ from typing import List, Literal, Optional, TypedDict
 from dotenv import load_dotenv
 
 from generation.confidence_check import build_warning, score_chunk_confidence
-from generation.gemini_key_rotation import call_with_key_rotation
+from generation.gemini_key_rotation import (
+    build_http_options,
+    call_with_model_and_key_rotation,
+)
 from generation.prompt_templates import AnswerStyle, Mode, build_prompt
 
 load_dotenv()
 
-# Single model for all modes/styles — see module docstring re: TDR's
-# original Sonnet/Haiku split. gemini-3.6-flash matches Stage 3's
-# vision model choice — see TDR Section 2e for why gemini-2.5-flash
-# was replaced (not accessible to newly-created API keys, defeating
-# the point of Section 2d's multi-key rotation).
-GENERATION_MODEL = os.getenv("GEMINI_GENERATION_MODEL", "gemini-3.6-flash")
+# Model priority chain, highest preference first. Each is tried on
+# the CURRENT key before rotating keys at all — see
+# gemini_key_rotation.call_with_model_and_key_rotation for why that
+# ordering matters (a 503 is per-model and globally shared, so
+# switching model beats sweeping keys).
+#
+# Verified reachable on our keys 2026-09-25 via one minimal call each:
+#   gemini-3.8-flash  OK   4.31s                      <- primary
+#   gemini-3.7-flash  503 high demand (exists, was congested)  <- fallback
+#   gemini-3.6-flash  OK   1.91s                      <- DELIBERATELY EXCLUDED
+#
+# DELIBERATE EXCLUSION of gemini-3.6-flash (user decision, and the
+# correct one): 3.6 was the previous primary and is the specific
+# model whose multi-hour 503 congestion on 2026-09-24/25 blocked
+# every attempted Stage 7 eval run — it is the reason this fallback
+# mechanism exists at all. Including it as a last-resort tier is
+# circular: if 3.8 and 3.7 both fail we would fall straight back onto
+# the known-unreliable model that caused the outage, converting a
+# clear, informative "all allowed models are down" signal into a
+# silent retry against the worst option. It was briefly added here as
+# a third tier on the reasoning that 3.7 was measurably 503 at
+# verification time and the chain would otherwise have no
+# verified-healthy fallback; that reasoning was wrong, because an
+# honest hard failure is more useful than a fallback onto the model
+# we are specifically trying to stop depending on. Total exhaustion
+# of this 2-tier chain now fails loudly and distinctly instead — see
+# gemini_key_rotation.AllModelsAndKeysExhaustedError.
+#
+# CAVEAT WORTH REMEMBERING (user observation): 3.8, 3.7 and 3.6 are
+# all Google Flash-tier models and may share underlying capacity, so
+# these two tiers are NOT guaranteed to fail independently. The
+# 2026-09-25 sample (3.7 down while 3.8 and 3.6 were up) is a single
+# data point. If the live run shows 3.8 and 3.7 degrading together,
+# treat model fallback as insufficient on its own rather than
+# assuming the chain is simply too short.
+#
+# Override with GEMINI_GENERATION_MODELS as a comma-separated list.
+GENERATION_MODELS = [
+    m.strip()
+    for m in os.getenv(
+        "GEMINI_GENERATION_MODELS",
+        "gemini-3.8-flash,gemini-3.7-flash",
+    ).split(",")
+    if m.strip()
+]
 
 # Finds every "Source N" occurrence anywhere in the answer text —
 # NOT anchored to appearing inside a "(...)" parenthetical, since the
@@ -143,6 +185,11 @@ class AnswerResult(TypedDict):
     answer_style: AnswerStyle
     sources: List[SourceInfo]
     warning: Optional[str]
+    model_used: Optional[str]  # which model in GENERATION_MODELS
+    # actually produced this answer, or None when no LLM call was made
+    # (the empty-chunks short-circuit below). Recorded so a fallback
+    # chain is auditable: a result is not interpretable without
+    # knowing which tier served it.
 
 
 def generate_answer(
@@ -173,10 +220,11 @@ def generate_answer(
             "answer_style": answer_style,
             "sources": [],
             "warning": "No relevant chunks were retrieved for this question.",
+            "model_used": None,
         }
 
     prompt = build_prompt(question, chunks, mode, answer_style)
-    raw_answer = _call_llm(prompt)
+    raw_answer, model_used = _call_llm(prompt)
 
     cited_indices, discarded_count = _extract_valid_citations(raw_answer, len(chunks))
     used_chunks = [chunks[i] for i in cited_indices]
@@ -190,6 +238,7 @@ def generate_answer(
         "answer_style": answer_style,
         "sources": sources,
         "warning": warning,
+        "model_used": model_used,
     }
 
 
@@ -244,18 +293,24 @@ def _chunk_to_source_info(chunk: dict) -> SourceInfo:
     }
 
 
-def _call_llm(prompt: str) -> str:
-    """Sends the assembled prompt to Gemini and returns the raw answer text.
+def _call_llm(prompt: str) -> tuple:
+    """Sends the assembled prompt to Gemini.
 
-    Uses call_with_key_rotation (TDR Section 2d) so a 429
-    RESOURCE_EXHAUSTED on one Gemini project's free-tier quota
-    automatically retries against the next configured key.
+    Returns:
+        (answer_text, model_used) — model_used names the model that
+        actually served the request, so the caller can record it (a
+        fallback chain is only auditable if the result says which
+        tier produced it).
+
+    Tries every model in GENERATION_MODELS on the current key before
+    rotating keys (TDR Section 2d for key rotation; see
+    call_with_model_and_key_rotation for why model-before-key).
     """
     from google import genai
 
-    def _make_call(api_key: str) -> str:
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(model=GENERATION_MODEL, contents=prompt)
+    def _make_call(api_key: str, model: str) -> str:
+        client = genai.Client(api_key=api_key, http_options=build_http_options())
+        response = client.models.generate_content(model=model, contents=prompt)
         return response.text or ""
 
-    return call_with_key_rotation(_make_call)
+    return call_with_model_and_key_rotation(_make_call, GENERATION_MODELS)

@@ -1,0 +1,70 @@
+[
+  {
+    "doc_id": "SampleServices_MSA_Contract",
+    "mode": "single_doc",
+    "clause_category": "Termination Notice Period",
+    "question": "What is the termination notice period?",
+    "expected_answer": "Termination for Convenience requires thirty (30) days written notice. Termination for Cause may occur immediately upon written notice if a material breach is not cured within fifteen (15) days of receiving written notice.",
+    "expected_page": 3
+  },
+  {
+    "doc_id": "Acme_Corp_Annual_Report",
+    "mode": "single_doc",
+    "clause_category": "Revenue Chart",
+    "question": "What does the revenue chart show?",
+    "expected_answer": "Revenue grew from $2.1M in 2020, to $2.6M in 2021, to $3.0M in 2022, to $4.2M in 2023.",
+    "expected_page": 2
+  },
+  {
+    "doc_id": "Retrieval_Augmented_QA_Systems",
+    "mode": "single_doc",
+    "clause_category": "Experimental Results",
+    "question": "What were the results of the experiments?",
+    "expected_answer": "Semantic chunking achieved 89% retrieval precision at k=3 on the financial corpus, versus 77% for fixed-size chunking. Structure-aware chunking achieved 94% clause-level precision on the legal corpus, outperforming both alternatives.",
+    "expected_page": 4
+  },
+  {
+    "doc_ids": [
+      "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT",
+      "SampleServices_MSA_Contract"
+    ],
+    "mode": "multi_doc",
+    "clause_category": "Termination (cross-contract comparison)",
+    "question": "What do these contracts say about termination?",
+    "expected_answer": "The Supply Agreement allows either party to terminate at any time prior to delivery of the Product, with no notice period required. The MSA Contract requires thirty (30) days written notice for Termination for Convenience, or immediate termination for a material breach uncured within fifteen (15) days.",
+    "expected_pages_by_doc": {
+      "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT": 3,
+      "SampleServices_MSA_Contract": 3
+    },
+    "note": "CUAD_XLITECHNOLOGIES_INC_12_02_2015-EX-10_02-STRATEGIC_ALLIANCE_A was removed from this entry's doc_ids: it has no termination clause at all (verified against the raw PDF -- its page 4 contains only an indemnity clause), so a 3-document comparison question would have forced the LLM judge to grade a composite answer (2 real clauses + 1 correct absence) against a single correct/partially_correct/incorrect verdict, which is exactly the grading ambiguity the fixed verdict scale is meant to avoid. It remains in evaluation/multi_doc_queries.json's md_01 coverage-test query, where testing 'does XLI get excluded from retrieval' is a valid, separate check. See TDR.md's known-limitations log for the related gap: whether the pipeline correctly says 'not found' for a requested document at the GENERATION level (not just retrieval coverage) is not covered by any correctness entry yet."
+  },
+  {
+    "doc_ids": [
+      "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT",
+      "CUAD_TRANSMONTAIGNEPARTNERSLLC_03_13_2020-EX-10_9-SERVICES_AGREEM"
+    ],
+    "mode": "multi_doc",
+    "clause_category": "Governing Law (cross-contract comparison)",
+    "question": "What do these contracts say about governing law?",
+    "expected_answer": "Both contracts state that they are governed by the laws of the State of Colorado, excluding conflicts-of-law principles, with disputes to be litigated/venued in Colorado.",
+    "expected_pages_by_doc": {
+      "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT": 4,
+      "CUAD_TRANSMONTAIGNEPARTNERSLLC_03_13_2020-EX-10_9-SERVICES_AGREEM": 3
+    }
+  },
+  {
+    "doc_ids": [
+      "CUAD_XLITECHNOLOGIES_INC_12_02_2015-EX-10_02-STRATEGIC_ALLIANCE_A",
+      "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT"
+    ],
+    "mode": "multi_doc",
+    "clause_category": "Parties (cross-contract comparison)",
+    "question": "Who are the parties in these contracts?",
+    "expected_answer": "The Strategic Alliance Agreement is between Bosch Technologies, LLC (\"BOSCH\") and Bosch International, LLC (\"CLIENT\"). The Supply Agreement is between EWSD 1, LLC d/b/a Shi Farms and Gridiron BioNutrients, Inc.",
+    "expected_pages_by_doc": {
+      "CUAD_XLITECHNOLOGIES_INC_12_02_2015-EX-10_02-STRATEGIC_ALLIANCE_A": 1,
+      "CUAD_GRIDIRONBIONUTRIENTS_INC_02_05_2020-EX-10_3-SUPPLY_AGREEMENT": 1
+    },
+    "note": "Both documents also restate the same party names on their signature page (raw PDF page 5 for both docs, verified directly) -- a real answer citing page 5 instead of page 1 is also a valid, correct citation and should not be scored as a retrieval miss if it comes up."
+  }
+]

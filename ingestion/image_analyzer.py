@@ -55,7 +55,7 @@ from google import genai
 from google.genai import types as genai_types
 
 from chunking.text_chunker import Chunk
-from generation.gemini_key_rotation import call_with_key_rotation
+from generation.gemini_key_rotation import build_http_options, call_with_key_rotation
 
 load_dotenv()
 
@@ -171,7 +171,7 @@ def _call_vision_api(image_path: str) -> str:
     mime_type = f"image/{'jpeg' if ext == 'jpg' else ext}"
 
     def _make_call(api_key: str) -> str:
-        client = genai.Client(api_key=api_key)
+        client = genai.Client(api_key=api_key, http_options=build_http_options())
         response = client.models.generate_content(
             model=GEMINI_VISION_MODEL,
             contents=[

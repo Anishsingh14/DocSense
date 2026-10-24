@@ -79,7 +79,7 @@ Stage 7 (Evaluation Framework) runs parallel to Stages 5–6 during development.
 | DOCX parsing | `python-docx` | Standard, preserves structure |
 | TXT parsing | Native Python | No dependency needed |
 | Chunking | `LlamaIndex` `SemanticSplitterNodeParser` + custom regex splitter for legal mode | Semantic chunking improves retrieval accuracy over fixed-size chunking |
-| Embeddings | ~~`voyage-3` (Voyage AI)~~ → **Google Gemini embedding API (free tier)** — see Section 2a. Fallback: `BAAI/bge-large-en-v1.5` (local, free) remains available | Keeps embeddings on the same free provider as vision/generation; local fallback avoids any API dependency if preferred |
+| Embeddings | ~~`voyage-3` (Voyage AI)~~ → **Google Gemini embedding API (free tier, `gemini-embedding-001` @ 768 dims)** — see Section 2a. Local `BGE` is available but **opt-in only**, not an automatic fallback — see Section 2h | Keeps embeddings on the same free provider as vision/generation. The originally-specified `bge-large-en-v1.5` (1024-dim) and the implemented `bge-small-en-v1.5` (384-dim) both mismatch the 768-dim collection, so switching backends requires a full corpus re-embed (Section 2h) |
 | Vector database | `Qdrant` (self-hosted via Docker) | Strong metadata filtering (doc_id, page_num, type) needed for multi-mode retrieval |
 | Re-ranking | `bge-reranker-v2-m3` (local, free) | Improves precision of top-k retrieved chunks before generation |
 | Vision analysis | ~~Claude (Sonnet) vision API~~ → **Google Gemini API (free tier)** — see Section 2a | Free-tier alternative with no billing setup required; Claude remains the documented target for a future upgrade |
@@ -256,6 +256,65 @@ This is a ranking-policy question (should multi_doc guarantee per-document repre
 - Guarantee at least 1 chunk per requested `doc_id` in the final top-k (e.g., reserve one slot per document, fill remaining slots by global rank).
 
 **Revisit trigger:** during Stage 7 evaluation, specifically test multi_doc queries against documents with uneven chunk-relevance scores (mirroring the case above) and measure how often a requested document is fully excluded from the final answer. If this happens often enough to measurably hurt multi_doc accuracy on the labeled eval set, implement one of the candidate fixes above before Stage 8.
+
+---
+
+## 2g. Known Gap: Generation-Level Absence Detection Is Not Yet Covered By Any Correctness Eval Entry
+
+**Flagged date:** 2026-09-24 (Stage 7 eval dataset construction — user manual review)
+**Status:** Known gap — no correctness entry exists yet; candidate for a dedicated eval entry later.
+
+### The gap
+
+Section 2f above measures a RETRIEVAL-level question: does a requested document contribute at least one chunk to the retrieved set at all? A distinct, GENERATION-level question is not yet measured by any answer-correctness entry: when a requested document genuinely has no relevant content for the question asked, does the generation layer correctly say so (e.g., "not found for this document") rather than either (a) hallucinating an answer for that document, or (b) silently omitting any mention of it with no indication that it was checked and found lacking?
+
+**How this surfaced:** while building the multi_doc correctness entry for "What do these contracts say about termination?", `CUAD_XLITECHNOLOGIES_INC...STRATEGIC_ALLIANCE_A` was found to have no termination clause at all (confirmed against the raw PDF — its relevant page contains only an indemnity clause). Including it in that entry would have required the LLM judge to grade a composite 3-part answer (two real clauses plus one correct absence) against a single `correct`/`partially_correct`/`incorrect` verdict — exactly the grading ambiguity the fixed verdict scale (see evaluation/llm_judge.py) is meant to avoid. It was removed from that entry's `doc_ids` for this reason (see evaluation/eval_dataset_supplement.json's `note` field on that entry) and kept only in the separate, ungraded multi-doc coverage stress test (`evaluation/multi_doc_queries.json`'s `md_01`), which checks retrieval-level coverage only, not whether generation correctly reports the absence.
+
+### Why this is a gap, not a bug
+
+No code currently claims to handle this correctly or incorrectly — it is simply unmeasured. `generation/confidence_check.py`'s `answer_indicates_not_found` (see this module) can detect when the LLM says nothing was found, but nothing in the current eval set specifically asks "the answer should mention document X was checked and has no relevant content, while still answering correctly for the other document(s) in the same multi-doc question."
+
+**Candidate for later:** a dedicated eval entry (or a small set of them) using a question deliberately scoped to include one clearly-irrelevant document alongside one or more clearly-relevant ones, with a verdict scale (or a separate boolean check) specifically for "did the answer correctly acknowledge the irrelevant document's absence of content, without hallucinating a false clause for it and without silently pretending it wasn't asked about." This likely needs its own grading rubric rather than reusing the single-clause `correct`/`partially_correct`/`incorrect` scale as-is, since "correctly identifying an absence" is a different judgment than "correctly summarizing present content."
+
+**Revisit trigger:** if multi_doc mode's real-world usage shows the generation layer hallucinating content for a document that has none (as opposed to just under-representing it at retrieval, per Section 2f), build the dedicated eval entry described above rather than continuing to defer it.
+
+---
+
+## 2h. Embedding Fallback Was Unsafe — Dimension & Vector-Space Mismatch (FOUND AND FIXED)
+
+**Found date:** 2026-09-25 (during a Stage 7 API-call-count audit)
+**Status:** **FIXED** — not a deferred limitation. See "The fix" below.
+
+### The problem
+
+`embedding/embed_chunks.py`'s `_embed_texts()` wrapped its Gemini call in a bare `except Exception` and, on *any* failure, silently fell back to the local model (`LOCAL_FALLBACK_MODEL`). This was unsafe in three independent ways:
+
+1. **Dimension mismatch.** The implemented local model, `BAAI/bge-small-en-v1.5`, emits **384-dim** vectors. The Qdrant collection is created at **768** (`embedding/vector_store.py`'s `VECTOR_SIZE`, matching `EMBEDDING_OUTPUT_DIMENSIONALITY`). A triggered fallback therefore produced vectors that physically cannot be upserted into or searched against the existing collection — surfacing as an opaque Qdrant dimension error far from the real cause, rather than as "Gemini was unavailable."
+
+2. **Vector-space mismatch** — the deeper issue, and *not* fixable by padding/projecting to 768 or by swapping in a natively-768-dim local model. Embeddings are only comparable within one model's own vector space. A query embedded by BGE, searched against chunks embedded by Gemini, produces cosine scores that are arithmetically valid but semantically meaningless — i.e. **silently wrong retrieval results**, which is strictly worse than a loud failure. Mixing embedding models inside one collection is incoherent regardless of dimensionality.
+
+3. **Bare `except Exception` masked unrelated bugs.** Any `TypeError`, `KeyError`, `ImportError` etc. originating in our own code was swallowed and misreported as "Gemini unavailable, falling back" — meaning a genuine defect could hide indefinitely behind a misleading warning.
+
+**Spec discrepancy also noted:** this file's Tech Stack table (Section 2) originally specified `BAAI/bge-large-en-v1.5` as the fallback, which is **1024-dim** — also not 768. So neither the specified model nor the implemented one matched the collection; the mismatch originated in the spec, not only in the implementation. The table has been corrected.
+
+**Never actually triggered in practice:** across all Stage 4/5/6/7 runs to date the Gemini embedding API remained available, so this path never executed. It came close during the 2026-09-24/25 `gemini-3.6-flash` congestion — generation calls were exhausting all 7 keys while `gemini-embedding-001` kept serving normally. Had the embedding model been congested too, the run would have failed with a confusing dimension error instead of a clear outage message.
+
+### The fix
+
+Chose **fail cleanly over pad/project**, because padding would only hide problem #2 — it converts a storable-but-meaningless vector into exactly the silent-wrongness failure mode this project's citation cross-checking exists to prevent. A coherent local-embedding setup requires the *entire* corpus and every subsequent query to use the same model, which makes it a deliberate corpus-wide configuration decision, not an automatic mid-run switch.
+
+| Before | After |
+|---|---|
+| Any exception → silent fallback to local model | Gemini-unavailability → raises new `EmbeddingUnavailableError` with explicit guidance; no automatic fallback |
+| Bare `except Exception` | Narrowed to `genai_errors.APIError` (parent of ClientError/ServerError), `httpx.TimeoutException`, `httpx.ConnectError`, plus `RuntimeError` for the no-keys-configured case. Everything else propagates untouched |
+| Local model reachable implicitly, as a fallback | Opt-in only, via `DOCSENSE_EMBEDDING_BACKEND=local`, documented as requiring a full corpus re-embed into a matching collection |
+| Dimensionality never checked | New `_assert_dimensionality_matches()` validates output against `EMBEDDING_OUTPUT_DIMENSIONALITY` on both backends, failing immediately with a message naming the offending model and both dimensions |
+
+**Verified locally** (mocked Gemini call, zero API calls) across 6 cases: 384-dim rejected with both dimensions named; 768-dim accepted; a simulated 503 raises `EmbeddingUnavailableError` *and* provably does not invoke the local model; a network timeout raises the same; and — the key narrowing check — an injected `TypeError` propagates intact rather than being converted into a spurious "Gemini unavailable."
+
+**What stays unchanged:** the embedding model itself (`gemini-embedding-001` at 768 dims), the chunk schema (Section 3), `vector_store.py`'s `VECTOR_SIZE`, and every downstream module's behaviour on the normal (Gemini-available) path.
+
+**Revisit trigger:** if local embeddings are ever genuinely needed (offline development, Gemini permanently unavailable), set `DOCSENSE_EMBEDDING_BACKEND=local`, recreate the Qdrant collection at the local model's own dimensionality, and re-embed every document — do not mix backends within one collection.
 
 ---
 
