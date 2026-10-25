@@ -4,7 +4,7 @@
 **Version:** 1.0 (V1 Scope)
 **Companion document to:** PRD.md
 **Status:** Draft for Agentic Build (Kiro)
-**Last Updated:** 2026-09-22 (Section 2e added — Gemini model change from gemini-2.5-flash to gemini-3.6-flash for Stages 3 and 6 documented)
+**Last Updated:** 2026-10-26 (Section 2i added — answer generation and grading moved from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
 
 ---
 
@@ -83,7 +83,7 @@ Stage 7 (Evaluation Framework) runs parallel to Stages 5–6 during development.
 | Vector database | `Qdrant` (self-hosted via Docker) | Strong metadata filtering (doc_id, page_num, type) needed for multi-mode retrieval |
 | Re-ranking | `bge-reranker-v2-m3` (local, free) | Improves precision of top-k retrieved chunks before generation |
 | Vision analysis | ~~Claude (Sonnet) vision API~~ → **Google Gemini API (free tier)** — see Section 2a | Free-tier alternative with no billing setup required; Claude remains the documented target for a future upgrade |
-| LLM (generation) | ~~Claude (Sonnet/Haiku)~~ → **Google Gemini API (free tier)** — see Section 2a | Same free-tier substitution as above, applied consistently across all LLM-calling stages |
+| LLM (generation + grading) | ~~Claude (Sonnet/Haiku)~~ → ~~Google Gemini API only~~ → **rotation across 7 OpenAI-compatible providers** (Groq, NVIDIA, Cohere, OpenRouter, Gemini; SiliconFlow and OpenCode Console configured but disabled) — see Section 2i | Gemini's sibling Flash-tier models share capacity and failed together, leaving 5 of 11 Stage 7 questions unmeasured. Independent vendors remove that shared-fate risk. Embeddings and image reading deliberately stay on Gemini |
 | Orchestration | `LlamaIndex` (`CitationQueryEngine` as base, customized) | Built specifically for citation-grounded Q&A |
 | Backend API | `FastAPI` | Async support, clean OpenAPI docs, easy to wire to a future frontend |
 | Evaluation | `RAGAS` (open-source) + custom scoring script | Automates retrieval/answer accuracy scoring |
@@ -315,6 +315,66 @@ Chose **fail cleanly over pad/project**, because padding would only hide problem
 **What stays unchanged:** the embedding model itself (`gemini-embedding-001` at 768 dims), the chunk schema (Section 3), `vector_store.py`'s `VECTOR_SIZE`, and every downstream module's behaviour on the normal (Gemini-available) path.
 
 **Revisit trigger:** if local embeddings are ever genuinely needed (offline development, Gemini permanently unavailable), set `DOCSENSE_EMBEDDING_BACKEND=local`, recreate the Qdrant collection at the local model's own dimensionality, and re-embed every document — do not mix backends within one collection.
+
+---
+
+## 2i. Multi-Provider Rotation for Answer Generation & Grading (Documented Deviation)
+
+**Decision date:** 2026-10-26
+**Status:** Active for V1 build/testing. Supersedes Section 2e's model chain **for answer calls only** — Sections 2a/2d still govern embeddings and image reading.
+
+### The problem
+
+Section 2d added 7 Gemini keys to survive per-project quota, and Section 2e pinned a 2-tier model chain (`gemini-3.8-flash` → `gemini-3.7-flash`). Both tiers are Google Flash-tier models and therefore **share capacity**. The live Stage 7 run of 2026-10-06 showed them failing together: 3.8 and 3.7 returned 503 within seconds of each other on the same key, repeatedly, and a single generation call could sweep all 7 keys × 2 models without success. **5 of 11 questions went unmeasured** before the run was stopped. Rotating keys or sibling models within one vendor cannot fix a vendor-wide capacity event — only rotating *vendors* can.
+
+### The substitution
+
+| Call site | Before | After |
+|---|---|---|
+| Stage 6 generation (`generation/answer_with_citations.py`) | 7 Gemini keys × 2 Gemini models | 7 independent providers, 1 pinned model each |
+| Stage 7 grading (`evaluation/llm_judge.py`) | same Gemini chain | same provider rotation |
+| Stage 4 embeddings (`embedding/embed_chunks.py`) | `GEMINI_API_KEY..._7` | **unchanged** |
+| Stage 3 image reading (`ingestion/image_analyzer.py`) | `GEMINI_API_KEY..._7` | **unchanged** |
+
+New module: `generation/provider_rotation.py`. `GENERATION_MODELS` and `GRADING_MODELS` are removed (they would be dead configuration that looks live).
+
+**All 7 providers are OpenAI-compatible**, verified live: each answered `GET /models` with HTTP 200 and accepts `POST /chat/completions` in OpenAI shape — including Cohere via `/compatibility/v1` and Gemini via `/v1beta/openai`. So one `httpx.post` serves all of them and **Cohere needs no special-case adapter**, which was not obvious beforehand. **No new dependency was added**: `httpx` is already present transitively via `google-genai`; the `openai` and `cohere` SDKs were deliberately not introduced.
+
+### Rotation behaviour
+
+- **Sticky**: a question goes to the current provider and that provider keeps serving every subsequent question until it fails.
+- **No partial resume**: on failure the next provider re-answers the *same* question from scratch, reusing the already-retrieved chunks. A half-finished answer is discarded entirely.
+- **Cooldown by error class**: 429 → 900s (quota windows do not clear in seconds); 503/504/network timeout/empty response → 60s; **401/402/403 → provider removed for the whole session** with a loud log line (an invalid key or a spent balance does not resolve mid-run); prompt-too-long → skipped for *that question only*, with no cooldown, since the provider is healthy for shorter prompts.
+- **An empty response is a failure.** Observed live: `openrouter/free` returned HTTP 200 with 0 characters after 20.9s. Accepting it would feed an empty string to the citation parser and surface as "no valid citations", indistinguishable from a bad answer. **A genuine negative finding is not a failure** — a provider answering "the contract does not state X" is a valid, useful answer and is returned verbatim; the absence-detection concern in Section 2g depends on such answers surviving.
+- **Total exhaustion** raises `AllProvidersExhaustedError`, a subclass of `AllModelsAndKeysExhaustedError`, so Stage 7 keeps recording the question as `not_measured` and excluding it from accuracy rates rather than scoring it as wrong. No silent fallback to a disabled or cooled-down provider.
+- Results record **both** `provider_used` and `model_used`. For the `openrouter/free` alias the served model is read back out of the response body, because the alias routes to an arbitrary free model per request and recording the alias would say nothing about what produced the answer.
+
+### Provider table (verified 2026-10-26)
+
+| Order | Provider | Model | Enabled | Live result |
+|---|---|---|---|---|
+| 1 | `RAG_Groq` | `openai/gpt-oss-20b` | yes | OK 0.8s; citations accepted both modes |
+| 2 | `RAG_NVIDIA` | `minimaxai/minimax-m3.1-flash` | yes | OK 0.9s; citations accepted both modes |
+| 3 | `RAG_Cohere` | `command-r-08-2024` | yes | OK 1.8s; citations accepted single_doc |
+| 4 | `RAG_OpenRouter` | `openrouter/free` | yes | OK 1.4s; **empty response** on legal mode |
+| 5 | `RAG_Gemini` | `gemini-3.8-flash` (pinned, not the `-latest` alias) | yes | **1 success in 5 attempts**; four 45s timeouts |
+| — | `RAG_SiliconFlow` | `Qwen/Qwen2.5-7B-Instruct` | **no** | HTTP 402, signup credit exhausted |
+| — | `RAG_OpenCode_Console` | `deepseek-v4.1-flash` | **no** | free models HTTP 403 (client-gated), paid HTTP 402 |
+
+Disabled providers are never called and emit one startup line explaining why, so a short rotation list is never mistaken for a bug.
+
+### Known limitations
+
+1. **Only 2-4 of the 7 providers were dependable at test time.** All 7 keys authenticate, but SiliconFlow and OpenCode Console cannot serve a request at all, and Gemini failed 4 of 5 attempts. The design is sized for 7; the usable pool is currently much smaller, so rotation has less headroom than the provider count suggests.
+2. **Embeddings and image reading remain single-vendor.** They stay on the Gemini key pool, so a Gemini-wide outage still blocks retrieval (every query needs one embedding call) even when answer generation has four healthy alternatives. This is the largest remaining shared-fate risk.
+3. **Citation formats differ by model.** The parser accepted every provider that emitted `(Source N)` and discarded zero citations, but adherence is a per-model behaviour, not a guarantee. Cohere declined to cite on the legal question and OpenRouter returned nothing at all. Verdicts and citation counts are therefore **not strictly comparable across providers**, which is why `provider_used` is recorded on every result.
+4. **Documents pass through several third-party providers.** Retrieved contract text is now sent to whichever vendor is active — Groq, NVIDIA, Cohere, OpenRouter or Google. For the public CUAD/sample documents used here that is acceptable, but it is a real data-handling change: confidential documents would be distributed across five external processors, each with its own retention and training policy. Review before using this on anything non-public.
+5. **Free-tier terms of service.** Cohere trial keys are explicitly **non-commercial** and capped at **1,000 calls/month**; OpenRouter free models are limited to roughly **20 requests/minute and 50 requests/day** (1,000/day only after a credit purchase). Running an evaluation suite repeatedly can plausibly exhaust these. Depending on free tiers for anything beyond development volume is not appropriate.
+6. **Unverified limits.** Context windows for `openai/gpt-oss-20b`, `minimaxai/minimax-m3.1-flash` and `gemini-3.8-flash` could **not** be confirmed from official documentation. Groq's and NVIDIA's current free-tier quotas are also **unverified** — Groq's official rate-limit page returned no usable content, and third-party sources for NVIDIA actively conflict (1,000 credits / 40 RPM versus "unlimited requests, no daily limits"). Treat all four as unknown rather than assuming a value.
+
+### Not a production solution
+
+Same caveat as Section 2d, now spread across more vendors: this is a development-volume workaround that trades single-vendor fragility for multi-vendor free-tier fragility. It does not provide an SLA, cost control, consistent output quality, or a single data processor.
 
 ---
 

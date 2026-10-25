@@ -103,59 +103,32 @@ from typing import List, Literal, Optional, TypedDict
 from dotenv import load_dotenv
 
 from generation.confidence_check import build_warning, score_chunk_confidence
-from generation.gemini_key_rotation import (
-    build_http_options,
-    call_with_model_and_key_rotation,
-)
+from generation.provider_rotation import call_with_provider_rotation
 from generation.prompt_templates import AnswerStyle, Mode, build_prompt
 
 load_dotenv()
 
-# Model priority chain, highest preference first. Each is tried on
-# the CURRENT key before rotating keys at all — see
-# gemini_key_rotation.call_with_model_and_key_rotation for why that
-# ordering matters (a 503 is per-model and globally shared, so
-# switching model beats sweeping keys).
+# REMOVED (TDR Section 2i): GENERATION_MODELS, the Gemini-only
+# 2-tier model chain (gemini-3.8-flash -> gemini-3.7-flash), together
+# with its GEMINI_GENERATION_MODELS override. Answer generation now
+# rotates across independent vendors via generation/
+# provider_rotation.py, which pins one model per provider, so a
+# Gemini-specific model list here would be dead configuration that
+# looks live.
 #
-# Verified reachable on our keys 2026-09-25 via one minimal call each:
-#   gemini-3.8-flash  OK   4.31s                      <- primary
-#   gemini-3.7-flash  503 high demand (exists, was congested)  <- fallback
-#   gemini-3.6-flash  OK   1.91s                      <- DELIBERATELY EXCLUDED
-#
-# DELIBERATE EXCLUSION of gemini-3.6-flash (user decision, and the
-# correct one): 3.6 was the previous primary and is the specific
-# model whose multi-hour 503 congestion on 2026-09-24/25 blocked
-# every attempted Stage 7 eval run — it is the reason this fallback
-# mechanism exists at all. Including it as a last-resort tier is
-# circular: if 3.8 and 3.7 both fail we would fall straight back onto
-# the known-unreliable model that caused the outage, converting a
-# clear, informative "all allowed models are down" signal into a
-# silent retry against the worst option. It was briefly added here as
-# a third tier on the reasoning that 3.7 was measurably 503 at
-# verification time and the chain would otherwise have no
-# verified-healthy fallback; that reasoning was wrong, because an
-# honest hard failure is more useful than a fallback onto the model
-# we are specifically trying to stop depending on. Total exhaustion
-# of this 2-tier chain now fails loudly and distinctly instead — see
-# gemini_key_rotation.AllModelsAndKeysExhaustedError.
-#
-# CAVEAT WORTH REMEMBERING (user observation): 3.8, 3.7 and 3.6 are
-# all Google Flash-tier models and may share underlying capacity, so
-# these two tiers are NOT guaranteed to fail independently. The
-# 2026-09-25 sample (3.7 down while 3.8 and 3.6 were up) is a single
-# data point. If the live run shows 3.8 and 3.7 degrading together,
-# treat model fallback as insufficient on its own rather than
-# assuming the chain is simply too short.
-#
-# Override with GEMINI_GENERATION_MODELS as a comma-separated list.
-GENERATION_MODELS = [
-    m.strip()
-    for m in os.getenv(
-        "GEMINI_GENERATION_MODELS",
-        "gemini-3.8-flash,gemini-3.7-flash",
-    ).split(",")
-    if m.strip()
-]
+# The history is kept because it explains the current design:
+#   - gemini-3.6-flash was deliberately EXCLUDED from that chain (its
+#     multi-hour 503 congestion on 2026-09-24/25 blocked every
+#     attempted Stage 7 run, so falling back onto it was circular).
+#   - 3.8 and 3.7 then degraded TOGETHER during the 2026-10-06 run,
+#     503-ing within seconds of each other on the same key. That
+#     confirmed the shared-capacity caveat recorded at the time:
+#     sibling Flash-tier models are not independent failure domains,
+#     so model fallback within one vendor cannot fix a vendor-wide
+#     capacity event. Cross-vendor rotation is the response to that
+#     finding.
+# Gemini remains available as one of the seven answer providers
+# (RAG_Gemini, pinned to gemini-3.8-flash).
 
 # Finds every "Source N" occurrence anywhere in the answer text —
 # NOT anchored to appearing inside a "(...)" parenthetical, since the
@@ -185,11 +158,17 @@ class AnswerResult(TypedDict):
     answer_style: AnswerStyle
     sources: List[SourceInfo]
     warning: Optional[str]
-    model_used: Optional[str]  # which model in GENERATION_MODELS
-    # actually produced this answer, or None when no LLM call was made
-    # (the empty-chunks short-circuit below). Recorded so a fallback
-    # chain is auditable: a result is not interpretable without
-    # knowing which tier served it.
+    provider_used: Optional[str]  # which answer provider (env var
+    # name, e.g. "RAG_Groq") served this answer, or None when no LLM
+    # call was made (the empty-chunks short-circuit below). Added with
+    # TDR Section 2i's multi-provider rotation: with 7 vendors in play,
+    # "which model" is no longer enough to interpret a result — two
+    # providers can serve the same model id, and provider is the unit
+    # that cooldowns and session-removal act on.
+    model_used: Optional[str]  # which model actually served it, as
+    # reported by the provider's own response rather than the
+    # configured id — these differ for the openrouter/free alias,
+    # which routes to an arbitrary free model per request.
 
 
 def generate_answer(
@@ -220,11 +199,12 @@ def generate_answer(
             "answer_style": answer_style,
             "sources": [],
             "warning": "No relevant chunks were retrieved for this question.",
+            "provider_used": None,
             "model_used": None,
         }
 
     prompt = build_prompt(question, chunks, mode, answer_style)
-    raw_answer, model_used = _call_llm(prompt)
+    raw_answer, provider_used, model_used = _call_llm(prompt)
 
     cited_indices, discarded_count = _extract_valid_citations(raw_answer, len(chunks))
     used_chunks = [chunks[i] for i in cited_indices]
@@ -238,6 +218,7 @@ def generate_answer(
         "answer_style": answer_style,
         "sources": sources,
         "warning": warning,
+        "provider_used": provider_used,
         "model_used": model_used,
     }
 
@@ -294,23 +275,24 @@ def _chunk_to_source_info(chunk: dict) -> SourceInfo:
 
 
 def _call_llm(prompt: str) -> tuple:
-    """Sends the assembled prompt to Gemini.
+    """Sends the assembled prompt to the current answer provider.
 
     Returns:
-        (answer_text, model_used) — model_used names the model that
-        actually served the request, so the caller can record it (a
-        fallback chain is only auditable if the result says which
-        tier produced it).
+        (answer_text, provider_used, model_used) — so the caller can
+        record BOTH which vendor served the request and which model
+        that vendor actually used. A rotation chain is only auditable
+        if the result says what produced it, and for the
+        openrouter/free alias the served model is not knowable from
+        the configured id alone.
 
-    Tries every model in GENERATION_MODELS on the current key before
-    rotating keys (TDR Section 2d for key rotation; see
-    call_with_model_and_key_rotation for why model-before-key).
+    CHANGED (TDR Section 2i): previously this tried every model in
+    GENERATION_MODELS against each Gemini key in turn. That chain
+    shared Google's Flash-tier capacity, so a congestion event took
+    out every tier at once (Stage 7 run of 2026-10-06: 5 of 11
+    questions unmeasured). Answer calls now rotate across independent
+    vendors instead — see generation/provider_rotation.py. Embeddings
+    and image reading deliberately stay on the Gemini key pool.
     """
-    from google import genai
-
-    def _make_call(api_key: str, model: str) -> str:
-        client = genai.Client(api_key=api_key, http_options=build_http_options())
-        response = client.models.generate_content(model=model, contents=prompt)
-        return response.text or ""
-
-    return call_with_model_and_key_rotation(_make_call, GENERATION_MODELS)
+    return call_with_provider_rotation(
+        [{"role": "user", "content": prompt}]
+    )

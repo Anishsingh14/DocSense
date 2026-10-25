@@ -200,14 +200,24 @@ class QuestionRecord(TypedDict):
     # was actually retrieved is NOT a full retrieval success).
     generated_answer: str
     generation_warning: Optional[str]
-    generation_model: Optional[str]  # which model in the fallback
-    # chain actually produced the answer (None if no LLM call was
-    # made). Required so every logged result names its model — a
-    # verdict is not interpretable without knowing which tier served
-    # it, and it also reveals how often the primary was unavailable.
+    generation_provider: Optional[str]  # which answer provider served
+    # the generation call (env var name, e.g. "RAG_Groq"), or None if
+    # no LLM call was made. Added with TDR Section 2i: with seven
+    # vendors rotating, the provider is the unit that cooldowns and
+    # session-removal act on, so a result cannot be interpreted — or
+    # a bad streak attributed — without it.
+    generation_model: Optional[str]  # which model actually produced
+    # the answer, as reported by the provider's own response rather
+    # than the configured id (they differ for the openrouter/free
+    # alias, which routes to an arbitrary free model per request).
+    # Required so every logged result names its model.
     verdict: str
     verdict_reason: str
-    grading_model: Optional[str]  # same, for the grading call
+    grading_provider: Optional[str]  # same, for the grading call —
+    # kept separate because generation and grading can legitimately
+    # land on different providers for the same question, and a verdict
+    # needs to be attributable to whoever actually issued it.
+    grading_model: Optional[str]
     grading_raw_response: str
     error: Optional[str]  # populated instead of the above fields if
     # this question raised an exception, so one failure doesn't crash
@@ -407,9 +417,11 @@ def run_question(eval_q: EvalQuestion) -> QuestionRecord:
             "retrieval_correct": retrieval_correct,
             "generated_answer": generated_answer,
             "generation_warning": result["warning"],
+            "generation_provider": result.get("provider_used"),
             "generation_model": result.get("model_used"),
             "verdict": grading["verdict"],
             "verdict_reason": grading["reason"],
+            "grading_provider": grading.get("provider_used"),
             "grading_model": grading.get("model_used"),
             "grading_raw_response": grading["raw_response"],
             "error": None,
@@ -495,9 +507,11 @@ def _unmeasured_record(base: dict, exc: Exception, error_kind: str) -> QuestionR
         "retrieval_correct": False,
         "generated_answer": "",
         "generation_warning": None,
+        "generation_provider": None,
         "generation_model": None,
         "verdict": VERDICT_NOT_MEASURED,
         "verdict_reason": f"NOT MEASURED ({error_kind}): {type(exc).__name__}: {exc}",
+        "grading_provider": None,
         "grading_model": None,
         "grading_raw_response": "",
         "error": f"{type(exc).__name__}: {exc}",
@@ -596,13 +610,22 @@ def estimate_call_count(num_questions: int, num_coverage_queries: int) -> dict:
         + grading_calls
     )
 
+    # RELABELLED (TDR Section 2i): the TOTAL is unchanged, but the
+    # calls no longer all go to Gemini. Embedding calls still use the
+    # GEMINI_API_KEY..._7 pool, while generation and grading now go to
+    # whichever answer provider is currently active. Reporting all 81
+    # under one "Gemini" heading would misstate which quota each call
+    # actually consumes — and quota headroom is the whole reason this
+    # estimate exists.
     return {
         "eval_questions": num_questions,
         "coverage_queries": num_coverage_queries,
-        "question_embedding_calls (retrieval)": question_embedding_calls,
-        "coverage_embedding_calls (retrieval)": coverage_embedding_calls,
-        "generation_calls": generation_calls,
-        "grading_calls": grading_calls,
+        "[GEMINI keys] question_embedding_calls (retrieval)": question_embedding_calls,
+        "[GEMINI keys] coverage_embedding_calls (retrieval)": coverage_embedding_calls,
+        "[GEMINI keys] subtotal": question_embedding_calls + coverage_embedding_calls,
+        "[ANSWER providers] generation_calls": generation_calls,
+        "[ANSWER providers] grading_calls": grading_calls,
+        "[ANSWER providers] subtotal": generation_calls + grading_calls,
         "total_estimated_calls (floor, assumes no retries)": total,
     }
 
@@ -855,7 +878,9 @@ def main() -> None:
 
     estimate = estimate_call_count(len(eval_questions), len(coverage_queries))
     print("=" * 88, flush=True)
-    print("ESTIMATED GEMINI CALL COUNT FOR THIS RUN", flush=True)
+    print("ESTIMATED API CALL COUNT FOR THIS RUN", flush=True)
+    print("(embeddings consume the Gemini key pool; generation and "
+          "grading consume answer-provider quota)", flush=True)
     print("=" * 88, flush=True)
     for key, value in estimate.items():
         print(f"  {key}: {value}", flush=True)
@@ -889,8 +914,9 @@ def main() -> None:
             f"{q_elapsed:.1f}s [{status}]{slow_flag} — "
             f"mode={record['mode']} verdict={record['verdict']} "
             f"retrieval_correct={record['retrieval_correct']} "
-            f"gen_model={record.get('generation_model')} "
-            f"grade_model={record.get('grading_model')} — {record['question'][:70]!r}",
+            f"gen={record.get('generation_provider')}/{record.get('generation_model')} "
+            f"grade={record.get('grading_provider')}/{record.get('grading_model')} "
+            f"— {record['question'][:70]!r}",
             flush=True,
         )
         if record["error"]:

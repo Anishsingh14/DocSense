@@ -21,28 +21,21 @@ setup needed.
 
 from __future__ import annotations
 
-import os
 import re
 from typing import Literal, TypedDict
 
-from generation.answer_with_citations import GENERATION_MODELS
-from generation.gemini_key_rotation import (
-    build_http_options,
-    call_with_model_and_key_rotation,
-)
+from generation.provider_rotation import call_with_provider_rotation
 
-# Reuses Stage 6's generation model chain rather than introducing a
-# second chain to track — grading is a text-only, same-complexity-class
-# task as answer generation itself, and keeping one list means a
-# verified-healthy model benefits both paths. Override independently
-# with GEMINI_GRADING_MODELS (comma-separated) if they ever need to
-# diverge.
-_grading_override = os.getenv("GEMINI_GRADING_MODELS", "").strip()
-GRADING_MODELS = (
-    [m.strip() for m in _grading_override.split(",") if m.strip()]
-    if _grading_override
-    else list(GENERATION_MODELS)
-)
+# CHANGED (TDR Section 2i): grading previously reused Stage 6's Gemini
+# GENERATION_MODELS chain. Both now share the multi-provider rotation
+# in generation/provider_rotation.py instead, which keeps the original
+# rationale intact — grading is a text-only task of the same
+# complexity class as answer generation, so a healthy provider should
+# benefit both paths — while removing the single-vendor shared-fate
+# problem that left 5 of 11 Stage 7 questions unmeasured on
+# 2026-10-06. The per-provider model is pinned in
+# provider_rotation.PROVIDERS; there is no separate grading model list
+# to keep in sync any more.
 
 Verdict = Literal["correct", "partially_correct", "incorrect"]
 
@@ -78,9 +71,14 @@ class GradingResult(TypedDict):
     verdict: Verdict
     reason: str
     raw_response: str
-    model_used: str  # which model in GRADING_MODELS produced this
-    # verdict — recorded so a spot-check can tell whether a given
-    # grade came from the primary model or a fallback tier.
+    provider_used: str  # which answer provider graded this (env var
+    # name, e.g. "RAG_Groq"). Recorded because a verdict is only
+    # interpretable if you know who issued it — different vendors
+    # grade with noticeably different strictness, so a spot-check
+    # needs to be able to group verdicts by grader.
+    model_used: str  # the model that actually served the grading
+    # call, as reported by the provider itself (differs from the
+    # configured id for the openrouter/free alias).
 
 
 def grade_answer(question: str, generated_answer: str, expected_answer: str) -> GradingResult:
@@ -105,13 +103,14 @@ def grade_answer(question: str, generated_answer: str, expected_answer: str) -> 
         expected_answer=expected_answer,
         generated_answer=generated_answer,
     )
-    raw_response, model_used = _call_llm(prompt)
+    raw_response, provider_used, model_used = _call_llm(prompt)
     verdict, reason = _parse_grading_response(raw_response)
 
     return {
         "verdict": verdict,
         "reason": reason,
         "raw_response": raw_response,
+        "provider_used": provider_used,
         "model_used": model_used,
     }
 
@@ -156,18 +155,13 @@ def _parse_grading_response(raw_response: str) -> tuple:
 
 
 def _call_llm(prompt: str) -> tuple:
-    """Sends the grading prompt to Gemini.
+    """Sends the grading prompt to the current answer provider.
 
     Returns:
-        (raw_response_text, model_used). Same call-construction
-        pattern as generation/answer_with_citations.py's _call_llm —
-        see module docstring.
+        (raw_response_text, provider_used, model_used). Same
+        call-construction pattern as generation/
+        answer_with_citations.py's _call_llm — see module docstring.
     """
-    from google import genai
-
-    def _make_call(api_key: str, model: str) -> str:
-        client = genai.Client(api_key=api_key, http_options=build_http_options())
-        response = client.models.generate_content(model=model, contents=prompt)
-        return response.text or ""
-
-    return call_with_model_and_key_rotation(_make_call, GRADING_MODELS)
+    return call_with_provider_rotation(
+        [{"role": "user", "content": prompt}]
+    )
