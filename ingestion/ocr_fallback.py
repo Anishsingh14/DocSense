@@ -1,6 +1,6 @@
 """ocr_fallback.py — Stage 1 module.
 
-Runs Tesseract OCR on pages where text_parser.py returned near-empty
+This Runs Tesseract OCR on pages where text_parser.py returned near-empty
 text (i.e., likely scanned/image-only pages).
 
 Contract (per TDR Section 4):
