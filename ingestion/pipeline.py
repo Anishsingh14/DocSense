@@ -1,6 +1,6 @@
 """pipeline.py — Stage 1 orchestrator.
 
-Combines text_parser.py, image_extractor.py, and ocr_fallback.py into
+It combines text_parser.py, image_extractor.py, and ocr_fallback.py into
 a single per-document ingestion result.
 
 This module defines the Stage 1 OUTPUT CONTRACT. It is intentionally
