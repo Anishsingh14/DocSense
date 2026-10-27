@@ -20,7 +20,8 @@ own clause-level annotations (Document Name, Parties, Governing Law,
 Termination for Convenience, Exclusivity, etc.), with the **expected_page**
 already computed to match the PDF pagination above.
 
-This file is ready to drop into `evaluation/eval_dataset.json` as your
+This file now lives at `data/eval/cuad_sample_eval.json` (the earlier
+`evaluation/eval_dataset.json` path was never used) and serves as your
 starting point — no manual transcription needed for these entries. Format:
 
 ```json

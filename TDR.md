@@ -3,8 +3,8 @@
 
 **Version:** 1.0 (V1 Scope)
 **Companion document to:** PRD.md
-**Status:** Draft for Agentic Build (Kiro)
-**Last Updated:** 2026-10-26 (Section 2i added — answer generation and grading moved from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
+**Status:** Stages 1–6 built and verified; Stage 7 (evaluation framework) built; Stages 8–9 not started
+**Last Updated:** 2026-10-27 (documentation synced to the code as built: Stage 7 module list corrected to the three real dataset files and the actual verdict scale, Evaluation tech-stack row corrected — RAGAS is not called, Stage 8/9 marked not started. Section 2i, added 2026-10-26, documents the move of answer generation and grading from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
 
 ---
 
@@ -86,7 +86,7 @@ Stage 7 (Evaluation Framework) runs parallel to Stages 5–6 during development.
 | LLM (generation + grading) | ~~Claude (Sonnet/Haiku)~~ → ~~Google Gemini API only~~ → **rotation across 7 OpenAI-compatible providers** (Groq, NVIDIA, Cohere, OpenRouter, Gemini; SiliconFlow and OpenCode Console configured but disabled) — see Section 2i | Gemini's sibling Flash-tier models share capacity and failed together, leaving 5 of 11 Stage 7 questions unmeasured. Independent vendors remove that shared-fate risk. Embeddings and image reading deliberately stay on Gemini |
 | Orchestration | `LlamaIndex` (`CitationQueryEngine` as base, customized) | Built specifically for citation-grounded Q&A |
 | Backend API | `FastAPI` | Async support, clean OpenAPI docs, easy to wire to a future frontend |
-| Evaluation | `RAGAS` (open-source) + custom scoring script | Automates retrieval/answer accuracy scoring |
+| Evaluation | ~~`RAGAS`~~ → **custom scoring script** (`evaluation/run_eval.py` + `evaluation/llm_judge.py`) | Two separately-reported metrics: a deterministic per-document retrieved-page check, and LLM-as-judge answer correctness on a fixed verdict scale. RAGAS is **not** called by the code — it stays in `requirements.txt` and remains a candidate for continuous faithfulness/relevancy scoring later. Deviation recorded in `run_eval.py`'s module docstring |
 | Frontend (Stage 9 only) | `Streamlit` | Fastest path to a usable demo UI |
 
 ---
@@ -454,18 +454,30 @@ Every chunk — whether derived from text or an image — must conform to this s
 - `answer_with_citations.py`: assembles labeled context (`[Source N | Page X]`), calls the LLM, parses citations back against actual retrieved metadata (never trust the LLM's own page-number memory — always cross-check against what was actually retrieved). **V1 build uses Google Gemini's API (free tier)** — see Section 2a for the documented substitution from Claude
 - `confidence_check.py`: flags low-confidence answers (e.g., low similarity score on retrieved chunks, or LLM stating "not found")
 
-### Stage 7 — Evaluation (`evaluation/`)
-- `eval_dataset.json`: the labeled test Q&A set (see Section 9 below)
-- `run_eval.py`: runs each test question through the full pipeline, compares retrieved page vs. expected page, and answer correctness (via RAGAS metrics: faithfulness, answer relevancy, context precision)
-- Outputs a simple accuracy report (percentage correct, per-mode breakdown)
+### Stage 7 — Evaluation (`evaluation/`) — BUILT
 
-### Stage 8 — API (`api/`)
+Updated to match the code as built. The original entry named a single
+`eval_dataset.json` and RAGAS metrics; neither matches the implementation.
+
+- **Datasets** (three, not one):
+  - `data/eval/cuad_sample_eval.json` — the original labeled set (Section 9). Every entry is `mode: "legal"`.
+  - `evaluation/eval_dataset_supplement.json` — added so the `single_doc` and `multi_doc` rows of the per-mode breakdown are not empty. `multi_doc` entries use **`expected_pages_by_doc`**, a `{doc_id: page}` mapping, because one clause can sit on a different page in each document being compared; a single `expected_page` int could not represent that. Single-doc/legal entries keep `expected_page` and are normalized into the same per-doc shape on load.
+  - `evaluation/multi_doc_queries.json` — **12** coverage queries (`query_id`, `question`, `doc_ids`), with no expected answer. Used only for the multi-document coverage check that measures the Section 2f gap.
+- `run_eval.py`: runs each question through retrieval and generation and reports **two separate metrics** — a deterministic retrieval check (did each requested `doc_id`'s own expected page appear among the chunks retrieved for that same `doc_id`; scored with `all()`, not `any()`), and LLM-graded answer correctness. Retrieval is measured via `retrieve_and_rerank()` directly, before generation runs, so a generation or citation fault is not blamed on retrieval. The retrieved chunks are then passed straight into `generate_answer()` rather than re-retrieving.
+- `llm_judge.py`: LLM-as-judge grading on a **fixed verdict scale** — `correct` / `partially_correct` / `incorrect` — never free text, so verdicts are comparable and summarizable.
+- **`not_measured`**: a fourth, deliberately separate outcome for a question that could not be graded at all (infrastructure failure). It sits outside the three-value grading scale and is **excluded from every accuracy rate**, because counting a provider outage as a wrong answer would make the headline numbers depend on vendor capacity. Each carries an `error_kind`: `all_models_and_keys_exhausted`, `embedding_unavailable`, or `other` (a genuine code defect).
+- **Output**: a full per-question transcript (question, expected vs. generated answer, retrieved pages per document, verdict, reason, raw grader response, `provider_used`, `model_used`) written to a timestamped JSON under `evaluation/results/`, plus a human-readable console summary broken down by mode.
+- **`--estimate-only`**: prints the API-call estimate and exits **without making any API calls**. Current dataset: **81** calls as a floor — **35** on the Gemini key pool (query embeddings for 23 questions + 12 coverage queries) and **46** on the answer providers (23 generation + 23 grading). A floor, not a ceiling: each retry is an additional real request.
+
+### Stage 8 — API (`api/`) — NOT STARTED (directory does not exist yet)
 - `main.py` (FastAPI): 
   - `POST /upload` — accepts file(s), runs Stages 1–4, returns `doc_id(s)`
   - `POST /query` — accepts `{question, doc_ids, mode, answer_style}`, runs Stages 5–6, returns the answer schema from Section 3
   - `GET /health` — basic status check
 
-### Stage 9 — Frontend (`frontend/`) — built last
+**Under consideration for Stage 8, not implemented and no design decided:** letting users supply their own API keys instead of relying on the server's key pool.
+
+### Stage 9 — Frontend (`frontend/`) — built last — NOT STARTED (directory does not exist yet)
 - `app.py` (Streamlit): file upload, mode selector, chat interface, citation display with expandable source text, inline image preview when an image-based source is cited
 
 ---

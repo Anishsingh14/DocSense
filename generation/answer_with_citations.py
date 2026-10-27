@@ -78,20 +78,30 @@ appear, not a change to what counts as a citation.
 DEVIATION FROM TDR (see TDR.md Section 2a): TDR specifies Claude
 (Sonnet for legal/precision mode, Haiku for general/summary mode) for
 generation. Per the user's documented provider substitution, this
-module uses Google Gemini instead, consistently across all modes (no
-Sonnet/Haiku-style two-tier model split — see GENERATION_MODEL below).
-The Gemini API call is isolated in `_call_llm`, so swapping back to
-Claude (and reintroducing a two-tier model choice, if desired) is a
-contained change to this one function.
+module does not use Claude, and applies ONE model per request across
+all modes rather than a Sonnet/Haiku-style two-tier split. The LLM
+call is isolated in `_call_llm`, so changing provider strategy stays
+a contained change to that one function.
 
-MODEL CHANGE (see TDR.md Section 2e): originally gemini-2.5-flash;
-switched to gemini-3.6-flash because the newer keys added for Section
-2d's multi-key rotation could not access gemini-2.5-flash at all (a
-404 "no longer available to new users" error), which defeated the
-purpose of having multiple keys. gemini-3.6-flash was verified
-(a) Stable (not preview/experimental) via Google's own model docs and
-(b) actually callable on a newly-created key via a direct live test,
-before being adopted here.
+PROVIDER CHANGE (see TDR.md Section 2i, which supersedes Section 2e
+for answer calls): generation no longer targets a Gemini model
+directly. `_call_llm` delegates to
+generation.provider_rotation.call_with_provider_rotation, which
+rotates across 7 independent OpenAI-compatible providers and pins one
+model per provider. The earlier Gemini-only chain
+(gemini-3.8-flash -> gemini-3.7-flash) was removed because both tiers
+share Google's Flash-tier capacity and were observed failing together,
+so model fallback within one vendor could not absorb a vendor-wide
+capacity event. Gemini remains one of the 7 providers (RAG_Gemini).
+
+Section 2e's history is still relevant background: gemini-2.5-flash is
+not available to newly-created API keys (404 "no longer available to
+new users"), which is why the pinned Gemini model is a 3.x Flash
+model rather than 2.5.
+
+NOTE: embeddings (Stage 4) and image analysis (Stage 3) are NOT
+affected by the above — they still use the GEMINI_API_KEY..._7 pool
+via generation.gemini_key_rotation.
 """
 
 from __future__ import annotations

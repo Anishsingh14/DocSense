@@ -36,6 +36,12 @@ test_output_images/
 # --- Logs ---
 *.log
 logs/
+stage7_live_run.txt
+stage7_run.txt
+progress.txt
+
+# --- Evaluation output (timestamped result JSONs, regenerated per run) ---
+evaluation/results/
 
 # --- OS files ---
 .DS_Store

@@ -100,6 +100,20 @@ DocSense solves this by combining accurate retrieval with mandatory page-level c
 
 This project must be built in the following stages. Each stage should be independently testable (e.g., via a script or terminal) before moving to the next.
 
+**Build status** (status only — the stage definitions below are unchanged):
+
+| Stage | Status |
+|---|---|
+| 1 — Ingestion & Parsing | Complete |
+| 2 — Chunking | Complete |
+| 3 — Image Analysis | Complete |
+| 4 — Embedding & Vector Storage | Complete |
+| 5 — Retrieval & Re-ranking | Complete |
+| 6 — Answer Generation | Complete |
+| 7 — Evaluation Framework | Built — framework in place (`evaluation/run_eval.py`, `evaluation/llm_judge.py`) |
+| 8 — API Layer | Not started |
+| 9 — Frontend UI | Not started |
+
 ### **Stage 1 — Ingestion & Parsing**
 Extract text and images from PDF/DOCX/TXT with page-number metadata preserved for every piece of content.
 

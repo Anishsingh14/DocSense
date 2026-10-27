@@ -28,7 +28,14 @@ sentence-transformers==3.1.1   # Local/free fallback (BGE models) — available 
 qdrant-client==1.11.2
 
 # --- Re-ranking ---
-FlagEmbedding==1.2.11      # bge-reranker-v2-m3
+FlagEmbedding==1.2.11      # bge-reranker-v2-m3.
+                           # NOTE (import audit, 2026-10-27): not imported anywhere in the
+                           # codebase. retrieval/reranker.py loads the reranker through
+                           # sentence-transformers' CrossEncoder instead (see
+                           # sentence-transformers above). Left in place rather than removed
+                           # because FlagEmbedding is the canonical library for this model
+                           # and removing it is an environment change, not a docs change —
+                           # flagged for a decision rather than deleted unilaterally.
 
 # --- LLM / Vision ---
 anthropic==0.34.2          # Claude API (generation + vision) — per TDR.md, not currently used.
@@ -36,9 +43,21 @@ anthropic==0.34.2          # Claude API (generation + vision) — per TDR.md, no
                            # (vision) and 6 (generation) use Gemini instead (see below). Kept
                            # here, unpinned from active use, so switching back later is a small
                            # change (swap the client in image_analyzer.py / answer_with_citations.py).
-google-genai==2.24.0       # Google Gemini API — vision (Stage 3), embeddings (Stage 4), and
-                           # generation (Stage 6): substitute for Claude (vision/generation) and
-                           # Voyage AI (embeddings)
+google-genai==2.24.0       # Google Gemini API — vision (Stage 3) and embeddings (Stage 4).
+                           # NO LONGER used for answer generation or grading: those rotate
+                           # across 7 OpenAI-compatible providers via
+                           # generation/provider_rotation.py (TDR Section 2i). Gemini is still
+                           # one of those 7, but reached over plain HTTP rather than this SDK.
+
+# --- HTTP client ---
+httpx==0.28.1              # ADDED 2026-10-27 (was previously relied on only transitively via
+                           # google-genai, which is fragile — a google-genai upgrade could drop
+                           # or change it). Imported directly by
+                           # generation/provider_rotation.py (all 7 answer providers speak the
+                           # OpenAI-compatible /chat/completions REST API, so no vendor SDK is
+                           # needed), generation/gemini_key_rotation.py and
+                           # embedding/embed_chunks.py (both catch httpx timeout/connection
+                           # errors explicitly).
 
 
 # --- Evaluation ---
