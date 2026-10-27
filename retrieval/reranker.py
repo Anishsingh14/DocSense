@@ -1,6 +1,6 @@
 """reranker.py — Stage 5 module.
 
-Re-scores retrieved chunks with `bge-reranker-v2-m3` (local, free —
+This module re-scores retrieved chunks with `bge-reranker-v2-m3` (local, free —
 no provider substitution needed here, unlike Stages 3/4/6), returning
 the top 3-5 per TDR Section 4.
 

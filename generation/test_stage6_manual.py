@@ -7,7 +7,7 @@ populated:
 Then run this script:
     python -m generation.test_stage6_manual
 
-Makes real Gemini API calls. Runs representative questions through
+This module makes real Gemini API calls. Runs representative questions through
 all 3 modes, both answer styles, and one deliberate "not found" case
 (a question with no relevant content in the target document), then
 prints the final answer, its sources (with confidence), and any

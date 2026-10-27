@@ -1,6 +1,6 @@
 """gemini_key_rotation.py — shared Gemini client helper (TDR Section 2d).
 
-Provides multi-key rotation for Gemini API calls, so hitting one
+This module provides multi-key rotation for Gemini API calls, so hitting one
 project's free-tier daily quota (429 RESOURCE_EXHAUSTED) doesn't stop
 the pipeline — the call is retried against the next configured key
 before giving up.
@@ -17,7 +17,7 @@ development-volume workaround (Gemini's free-tier quota is enforced
 per Google Cloud project, not per account, so multiple projects yield
 multiple independent quota pools) — NOT a production-scale rate-limit
 or load-balancing solution. See Section 2d for full reasoning and
-what stays unchanged.
+what stays unchanged respectively.
 """
 
 from __future__ import annotations
