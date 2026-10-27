@@ -25,7 +25,7 @@ REVISIT: once Stage 4's embedding model exists, consider swapping this
 for true semantic chunking (e.g., LlamaIndex's SemanticSplitterNodeParser)
 if retrieval accuracy in Stage 7 evaluation shows it's needed.
 
-Output: list of chunk dicts conforming to the TDR Section 3 schema.
+Output: list of chunk dicts conforming to the TDR Section 3 schema respectively.
 """
 
 from __future__ import annotations

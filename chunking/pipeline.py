@@ -3,8 +3,8 @@
 Takes a Stage 1 IngestedDocument (from ingestion/pipeline.py) and
 produces a list of schema-conformant text chunks (TDR Section 3),
 by:
-  1. Classifying doc_type (doc_type_classifier.py)
-  2. Routing to legal_chunker.py if doc_type == "legal",
+  1. Classifying the doc_type (doc_type_classifier.py)
+  2. Routing to legal_chunker.py, if doc_type == "legal",
      otherwise text_chunker.py
 
 Image-derived chunks are NOT produced here — that's Stage 3's job

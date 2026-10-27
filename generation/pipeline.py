@@ -1,8 +1,8 @@
 """pipeline.py — Stage 6 orchestrator.
 
-Combines retrieval.pipeline.retrieve_and_rerank() (Stage 5) with
-answer_with_citations.generate_answer() (Stage 6) into a single call:
-question -> final cited answer.
+This module combines retrieval.pipeline.retrieve_and_rerank() (of Stage 5) with
+answer_with_citations.generate_answer() (of Stage 6) into a single call:
+question -> final cited answer, respectively.
 """
 
 from __future__ import annotations

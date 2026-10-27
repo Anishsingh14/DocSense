@@ -1,8 +1,8 @@
 """image_extractor.py — Stage 1 module.
 
-Extracts embedded images per page from PDF files using PyMuPDF, and
+This module extracts embedded images per page from PDF files using PyMuPDF, and
 filters out decorative images below a size threshold before they are
-passed downstream (to Stage 3's vision analysis).
+passed downstream (to the Stage 3's vision analysis).
 
 Contract (per TDR Section 4 & Section 6 "Cost control on vision calls"):
     Returns a list of dicts:
@@ -26,7 +26,7 @@ Notes:
   stage can deduplicate repeated images across pages/documents before
   calling the vision API. Deduplication logic itself belongs to
   Stage 3 (image_analyzer.py), not here — this module only computes
-  and exposes the hash.
+  and exposes the hash respectively.
 """
 
 from __future__ import annotations

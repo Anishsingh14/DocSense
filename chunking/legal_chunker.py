@@ -9,7 +9,7 @@ mode exact, citable clause boundaries instead of size-based chunks.
 Falls back to text_chunker.py's structure-aware splitting for any
 stretch of text with no detected heading (e.g., a preamble before the
 first numbered section) and for documents where no headings are found
-at all, so legal_chunker.py never produces zero chunks.
+at all, so legal_chunker.py never produces zero chunks respectively.
 
 Output: list of chunk dicts conforming to the TDR Section 3 schema.
 """

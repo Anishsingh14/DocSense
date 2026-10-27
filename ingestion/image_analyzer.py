@@ -1,9 +1,9 @@
 """image_analyzer.py — Stage 3 module.
 
-Sends filtered, non-decorative images (from image_extractor.py) to a
+This module sends the filtered, non-decorative images (from image_extractor.py) to a
 vision-capable LLM with a strict, factual prompt, classifies the
 image_type (chart/diagram/table/photo), and converts the result into
-a schema-conformant chunk (type: "image") per TDR Section 3.
+a schema-conformant chunk (type: "image") per TDR Section 3 respectively.
 
 DEVIATION FROM TDR: TDR Section 2 specifies Claude (Sonnet) for vision
 analysis. The user has no Anthropic billing set up; per explicit user
@@ -39,10 +39,10 @@ every page) is analyzed once and the same description is reused for
 every occurrence.
 
 Error handling (TDR Section 7): "Vision API failure on an image ->
-log and skip that image; do not fail the entire document processing
+logs and skip that image; do not fail the entire document processing
 job." Implemented in analyze_images() — a failure on one image
 produces no chunk for that image, but does not raise or abort
-processing of the remaining images.
+processing of the remaining images purposefully.
 """
 
 from __future__ import annotations

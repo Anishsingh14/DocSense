@@ -1,8 +1,8 @@
 """prompt_templates.py — Stage 6 module.
 
-Holds the mode-specific (single_doc/multi_doc/legal) and style-specific
+This module holds the mode-specific (single_doc/multi_doc/legal) and style-specific
 (full/summary) prompt templates described in TDR Section 5 and PRD
-Section 9.
+Section 9 respectively.
 
 Each retrieved chunk is labeled as [Source N | ...] in the assembled
 context, where N is the chunk's position in the (already reranked)
@@ -12,7 +12,7 @@ chunk's own metadata (known to us already, from Stage 5), not from
 anything the LLM has to remember or infer. answer_with_citations.py
 maps the LLM's "[Source N]" references back to real metadata after
 generation — see that module for why this matters (TDR Section 6:
-"never trust the LLM's own page-number memory").
+"never trust the LLM's own page-number memory only").
 
 FIXED BUG (found via manual Stage 6 legal-mode test run — see
 answer_with_citations.py's "FIXED BUGS" #3): the legal and multi_doc
