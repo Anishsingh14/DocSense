@@ -20,6 +20,7 @@ that imports from here respectively.
 from __future__ import annotations
 
 import os
+import threading
 from typing import List, Literal, Optional, TypedDict
 
 from qdrant_client import QdrantClient
@@ -40,6 +41,25 @@ LOCAL_QDRANT_PATH = os.getenv("QDRANT_LOCAL_PATH", os.path.join("data", "vector_
 VECTOR_SIZE = 768
 
 _client: Optional[QdrantClient] = None
+
+# ADDED for Stage 8 (TDR Section 2j). Local embedded Qdrant is a
+# single in-process store: the client holds an exclusive file lock, so
+# only one process can open it, and concurrent use of that one client
+# object from multiple threads is not safe. The FastAPI layer serves
+# requests from Starlette's threadpool, so two requests genuinely can
+# reach these functions at the same time.
+#
+# SCOPE IS DELIBERATELY NARROW: this guards ONLY the Qdrant client
+# calls below. It is never held across an embedding, vision or
+# generation call — those are slow network calls (one measured at 39.9s
+# under provider congestion), and serialising them would let a single
+# slow request stall every other request. The CPU-only work between
+# client calls (filter construction, payload copying) is also left
+# outside the lock.
+#
+# RLock, not Lock: upsert_chunks() calls ensure_collection(), which
+# takes the same lock, so it must be re-entrant.
+_qdrant_lock = threading.RLock()
 
 
 def _get_client() -> QdrantClient:
@@ -83,14 +103,15 @@ def ensure_collection() -> None:
     """
     client = _get_client()
 
-    if not client.collection_exists(COLLECTION_NAME):
-        client.create_collection(
-            collection_name=COLLECTION_NAME,
-            vectors_config=qmodels.VectorParams(
-                size=VECTOR_SIZE,
-                distance=qmodels.Distance.COSINE,
-            ),
-        )
+    with _qdrant_lock:
+        if not client.collection_exists(COLLECTION_NAME):
+            client.create_collection(
+                collection_name=COLLECTION_NAME,
+                vectors_config=qmodels.VectorParams(
+                    size=VECTOR_SIZE,
+                    distance=qmodels.Distance.COSINE,
+                ),
+            )
 
 
 def upsert_chunks(embedded_chunks: List[dict]) -> int:
@@ -137,7 +158,8 @@ def upsert_chunks(embedded_chunks: List[dict]) -> int:
         for chunk in embedded_chunks
     ]
 
-    client.upsert(collection_name=COLLECTION_NAME, points=points)
+    with _qdrant_lock:
+        client.upsert(collection_name=COLLECTION_NAME, points=points)
     return len(points)
 
 
@@ -169,8 +191,9 @@ def search(
         descending score.
     """
     client = _get_client()
-    if not client.collection_exists(COLLECTION_NAME):
-        return []
+    with _qdrant_lock:
+        if not client.collection_exists(COLLECTION_NAME):
+            return []
 
     conditions = []
     if doc_ids:
@@ -184,13 +207,14 @@ def search(
 
     query_filter = qmodels.Filter(must=conditions) if conditions else None
 
-    results = client.query_points(
-        collection_name=COLLECTION_NAME,
-        query=query_vector,
-        query_filter=query_filter,
-        limit=limit,
-        with_payload=True,
-    ).points
+    with _qdrant_lock:
+        results = client.query_points(
+            collection_name=COLLECTION_NAME,
+            query=query_vector,
+            query_filter=query_filter,
+            limit=limit,
+            with_payload=True,
+        ).points
 
     hits = []
     for point in results:
@@ -209,17 +233,22 @@ def delete_document(doc_id: str) -> int:
     intentionally), so stale chunks don't linger alongside new ones.
     """
     client = _get_client()
-    if not client.collection_exists(COLLECTION_NAME):
-        return 0
+    with _qdrant_lock:
+        if not client.collection_exists(COLLECTION_NAME):
+            return 0
 
-    result = client.delete(
-        collection_name=COLLECTION_NAME,
-        points_selector=qmodels.FilterSelector(
-            filter=qmodels.Filter(
-                must=[qmodels.FieldCondition(key="doc_id", match=qmodels.MatchValue(value=doc_id))]
-            )
-        ),
-    )
+        result = client.delete(
+            collection_name=COLLECTION_NAME,
+            points_selector=qmodels.FilterSelector(
+                filter=qmodels.Filter(
+                    must=[
+                        qmodels.FieldCondition(
+                            key="doc_id", match=qmodels.MatchValue(value=doc_id)
+                        )
+                    ]
+                )
+            ),
+        )
     return 1 if result.status == qmodels.UpdateStatus.COMPLETED else 0
 
 
@@ -229,8 +258,9 @@ def count_points(doc_id: Optional[str] = None) -> int:
     verify upserts landed correctly.
     """
     client = _get_client()
-    if not client.collection_exists(COLLECTION_NAME):
-        return 0
+    with _qdrant_lock:
+        if not client.collection_exists(COLLECTION_NAME):
+            return 0
 
     count_filter = None
     if doc_id:
@@ -238,8 +268,78 @@ def count_points(doc_id: Optional[str] = None) -> int:
             must=[qmodels.FieldCondition(key="doc_id", match=qmodels.MatchValue(value=doc_id))]
         )
 
-    result = client.count(collection_name=COLLECTION_NAME, count_filter=count_filter)
+    with _qdrant_lock:
+        result = client.count(collection_name=COLLECTION_NAME, count_filter=count_filter)
     return result.count
+
+
+def list_documents() -> List[dict]:
+    """Returns one entry per distinct doc_id currently stored.
+
+    ADDED FOR STAGE 8 (TDR Section 2j) — read-only, and the only
+    addition to this Stage 4 module. It adds a function; it changes no
+    existing behaviour. It lives here rather than in api/ because this
+    module is deliberately the single place the Qdrant client is
+    constructed and touched (see _get_client's docstring), so putting
+    the scroll here keeps that property intact instead of reaching
+    into a private helper from the API layer.
+
+    Qdrant has no "distinct values" query, so this scrolls payloads
+    (vectors excluded, which is what makes it cheap) and aggregates in
+    Python. Fine at V1 scale; revisit if the collection grows large
+    enough that a full scroll becomes expensive.
+
+    Returns:
+        List of {doc_id, doc_name, doc_type, chunk_count, pages},
+        sorted by doc_id. `pages` is the count of distinct page
+        numbers seen for that document.
+    """
+    client = _get_client()
+    with _qdrant_lock:
+        if not client.collection_exists(COLLECTION_NAME):
+            return []
+
+    by_doc: dict = {}
+    next_offset = None
+    while True:
+        with _qdrant_lock:
+            points, next_offset = client.scroll(
+                collection_name=COLLECTION_NAME,
+                limit=256,
+                offset=next_offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+
+        for point in points:
+            payload = point.payload or {}
+            doc_id = payload.get("doc_id")
+            if not doc_id:
+                continue
+            entry = by_doc.setdefault(
+                doc_id,
+                {
+                    "doc_id": doc_id,
+                    "doc_name": payload.get("doc_name") or doc_id,
+                    "doc_type": payload.get("doc_type") or "unknown",
+                    "chunk_count": 0,
+                    "_pages": set(),
+                },
+            )
+            entry["chunk_count"] += 1
+            if payload.get("page_num") is not None:
+                entry["_pages"].add(payload["page_num"])
+
+        if next_offset is None:
+            break
+
+    documents = []
+    for entry in by_doc.values():
+        pages = entry.pop("_pages")
+        entry["pages"] = len(pages)
+        documents.append(entry)
+
+    return sorted(documents, key=lambda d: d["doc_id"])
 
 
 def _chunk_id_to_point_id(chunk_id: str) -> int:

@@ -12,7 +12,7 @@
 [![Streamlit](https://img.shields.io/badge/Streamlit-Frontend-FF4B4B?style=flat&logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat)](LICENSE)
 
-**Build status:** Stages 1–6 complete and independently verified · Stage 7 evaluation framework built · Stages 8–9 not started
+**Build status:** Stages 1–6 complete and independently verified · Stage 7 evaluation framework built · Stage 8 API layer built · Stage 9 not started
 
 </div>
 
@@ -48,7 +48,7 @@ No model training is required. DocSense orchestrates pre-trained LLM, embedding,
 | 5 — Retrieval & Re-ranking | ✅ Complete | Mode-aware candidate retrieval, re-ranked for precision |
 | 6 — Answer Generation | ✅ Complete | Generates the final cited answer from retrieved context |
 | 7 — Evaluation Framework | ✅ Built | Two separately-reported metrics — a deterministic retrieved-page check and LLM-graded answer correctness on a fixed verdict scale — plus a multi-document coverage check |
-| 8 — API Layer | ⏳ Not started | FastAPI endpoints for upload and query (`api/` does not exist yet) |
+| 8 — API Layer | ✅ Built | FastAPI endpoints for health, upload/ingest, list, delete and query |
 | 9 — Frontend UI | ⏳ Not started | Streamlit interface, built last (`frontend/` does not exist yet) |
 
 Every completed stage has been manually tested against 6 real sample documents (including real-world legal contracts from the [CUAD dataset](https://www.atticusprojectai.org/cuad)) and independently verified — not just accepted on the agent's word.
@@ -77,7 +77,10 @@ Answer Generation (mandatory page citation)
 Evaluation (retrieval accuracy + LLM-graded correctness)   ← Stage 7, built
       │
       ▼
-FastAPI Layer  →  Streamlit UI                             ← Stages 8–9, not started
+FastAPI Layer (single process, one shared Qdrant client)   ← Stage 8, built
+      │
+      ▼
+Streamlit UI                                               ← Stage 9, not started
 ```
 
 Full architectural detail, module responsibilities, and data schemas are documented in [`TDR.md`](./TDR.md). Product scope and build stages are documented in [`PRD.md`](./PRD.md).
@@ -96,7 +99,7 @@ Full architectural detail, module responsibilities, and data schemas are documen
 | Vector database | Qdrant, local embedded mode (documented deviation from Docker, TDR Section 2b) |
 | Re-ranking | `bge-reranker-v2-m3`, loaded locally through `sentence-transformers`' `CrossEncoder` |
 | HTTP client | `httpx` — all 7 answer providers speak the OpenAI-compatible `/chat/completions` REST API, so no per-vendor SDK is required |
-| Backend API | FastAPI *(Stage 8, not started)* |
+| Backend API | FastAPI — single process, one shared Qdrant client (TDR Section 2j) |
 | Evaluation | Custom scoring script — `evaluation/run_eval.py` + `evaluation/llm_judge.py`. **RAGAS is not called by the code**; it remains in `requirements.txt` as a candidate for continuous scoring later |
 | Frontend | Streamlit *(Stage 9, not started)* |
 
@@ -158,6 +161,12 @@ DocSense/
 │   ├── llm_judge.py                #   fixed-scale LLM-as-judge grading
 │   ├── eval_dataset_supplement.json#   single_doc + multi_doc questions
 │   └── multi_doc_queries.json      #   12 multi-document coverage queries
+├── api/                            # Stage 8 — FastAPI layer
+│   ├── main.py                     #   app, CORS, routes
+│   ├── schemas.py                  #   request/response models
+│   ├── service.py                  #   only module importing Stages 1-6
+│   ├── errors.py                   #   exception -> HTTP mapping
+│   └── test_stage8_api.py          #   mocked tests, zero API calls
 ├── data/
 │   ├── sample_docs/                # 6 test documents (synthetic + real CUAD contracts)
 │   ├── eval/                       # cuad_sample_eval.json — labeled Q&A set
@@ -230,8 +239,13 @@ python -m embedding.test_stage4_manual
 python -m retrieval.test_stage5_manual
 python -m generation.test_stage6_manual
 
-# Stage 8 and Stage 9 are not built yet:
-#   uvicorn api.main:app --reload     # api/ does not exist
+# Stage 8 — run the API (see the warning below about --reload)
+uvicorn api.main:app --port 8000
+
+# Stage 8 mocked tests (no API calls)
+python -m api.test_stage8_api
+
+# Stage 9 is not built yet:
 #   streamlit run frontend/app.py     # frontend/ does not exist
 ```
 
@@ -246,6 +260,68 @@ A few concrete, independently-checked results from testing:
 - **Retrieval confidence:** for an image-based question, the correct chart chunk was ranked ~160× higher than the next-best text chunk
 - **Multi-document mode:** correctly surfaced relevant clauses from 3 different contracts in a single ranked list
 - **Citation grounding:** generated answers were checked against the real page/section metadata of every source they cite, and the exact quoted text was cross-checked against the original source PDFs — no hallucinated pages, no dropped or fabricated citations
+
+## API (Stage 8)
+
+```bash
+uvicorn api.main:app --port 8000
+```
+
+Interactive docs at `http://127.0.0.1:8000/docs`.
+
+> **Run it as a single process.** Do not pass `--workers`, and do not pass `--reload`. The local embedded Qdrant store holds an exclusive file lock, and `--reload` spawns a second process which then fails with *"Storage folder data/vector_store is already accessed by another instance"*. For the same reason, don't run the API at the same time as `evaluation/run_eval.py`.
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/health` | Liveness and configuration. Takes no lock, makes no Qdrant or provider call |
+| POST | `/documents` | Upload a PDF/DOCX/TXT. Returns **202** with a `job_id`; ingestion runs in the background |
+| GET | `/documents/jobs/{job_id}` | Ingestion status: `queued` / `running` / `done` / `failed` |
+| GET | `/documents` | List stored documents with chunk and page counts |
+| DELETE | `/documents/{doc_id}` | Delete a document's chunks |
+| POST | `/query` | Ask a question in `single_doc`, `multi_doc` or `legal` mode |
+
+Upload cap is 25 MB; uploads land in `data/uploads/` (gitignored). CORS is restricted to localhost origins. Errors map to 415 (unsupported type), 413 (too large), 404 (unknown `doc_id`/`job_id`), 422 (invalid input or unreadable document) and 503 (providers exhausted, or embeddings unavailable — with `Retry-After`). No response ever contains a stack trace, a server path, or key material.
+
+**Query request**
+
+```json
+{ "question": "What is the termination notice period?",
+  "mode": "single_doc",
+  "doc_ids": ["SampleServices_MSA_Contract"],
+  "answer_style": "full" }
+```
+
+**Query response** — the full response is always returned; the UI decides what to show. Below is a real response from a live call, with the evidence list truncated to 2 of the 5 chunks it returned:
+
+```json
+{
+  "question": "What is the termination notice period?",
+  "mode": "single_doc",
+  "core": {
+    "answer": "\"Either party may terminate this Agreement with thirty (30) days written notice to the other party.\" (Source 1)",
+    "citations": [
+      { "source_number": 1, "doc_name": "SampleServices_MSA_Contract.pdf", "page_num": 3 }
+    ]
+  },
+  "evidence": {
+    "sources": [
+      { "source_number": 1, "doc_name": "SampleServices_MSA_Contract.pdf", "page_num": 3,
+        "section": "4.2 Termination for Convenience",
+        "text": "4.2 Termination for Convenience. Either party may terminate this Agreement with thirty (30) days\nwritten notice to the other party." },
+      { "source_number": 2, "doc_name": "SampleServices_MSA_Contract.pdf", "page_num": 3,
+        "section": "4.3 Termination for Cause",
+        "text": "4.3 Termination for Cause. Either party may terminate this Agreement immediately upon written notice\nif the other party materially breaches this Agreement and fails to cure such breach within fifteen (15)\ndays of receiving written notice describing the breach." }
+    ]
+  },
+  "meta": {
+    "provider_used": "RAG_Groq",
+    "model_used": "openai/gpt-oss-20b",
+    "citation_check": { "valid_citations": 1, "discarded_citations": 0, "warning": null }
+  }
+}
+```
+
+`evidence.sources` carries **every** retrieved chunk with its `source_number`, cited or not — match `source_number` against `core.citations` to highlight the ones the answer actually used. `meta.citation_check` is Stage 6's own cross-check of the model's citations against what was really retrieved.
 
 ## Evaluation
 
@@ -280,7 +356,7 @@ A separate set of **12 multi-document coverage queries** checks how often a requ
 
 | Version | Scope |
 |---|---|
-| **V1** (in progress — Stages 1–7 built, API and UI remaining) | PDF, DOCX, TXT + embedded image analysis, 3 Q&A modes |
+| **V1** (in progress — Stages 1–8 built, UI remaining) | PDF, DOCX, TXT + embedded image analysis, 3 Q&A modes |
 | V2 | PPTX, XLSX/CSV support |
 | V3 | Password-protected PDFs, legacy `.DOC`, handwriting OCR |
 | V4 | Multi-user support, persistent history, confidence scoring UI |

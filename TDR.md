@@ -3,8 +3,8 @@
 
 **Version:** 1.0 (V1 Scope)
 **Companion document to:** PRD.md
-**Status:** Stages 1–6 built and verified; Stage 7 (evaluation framework) built; Stages 8–9 not started
-**Last Updated:** 2026-10-27 (documentation synced to the code as built: Stage 7 module list corrected to the three real dataset files and the actual verdict scale, Evaluation tech-stack row corrected — RAGAS is not called, Stage 8/9 marked not started. Section 2i, added 2026-10-26, documents the move of answer generation and grading from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
+**Status:** Stages 1–6 built and verified; Stage 7 (evaluation framework) built; Stage 8 (API layer) built; Stage 9 not started
+**Last Updated:** 2026-10-28 (Section 2j added — Stage 8 FastAPI layer: endpoint shapes, single-process/narrow-lock concurrency model, asynchronous ingestion, error mapping, and the two approved exceptions to "no changes in earlier stages". Previously 2026-10-27: documentation synced to the code as built: Stage 7 module list corrected to the three real dataset files and the actual verdict scale, Evaluation tech-stack row corrected — RAGAS is not called, Stage 8/9 marked not started. Section 2i, added 2026-10-26, documents the move of answer generation and grading from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
 
 ---
 
@@ -378,6 +378,81 @@ Same caveat as Section 2d, now spread across more vendors: this is a development
 
 ---
 
+## 2j. Stage 8 API Layer — Shape, Concurrency & Two Approved Exceptions
+
+**Decision date:** 2026-10-28
+**Status:** Active for V1 build. Implements Section 4's Stage 8 module; adds no logic to Stages 1–6.
+
+### Scope
+
+`api/` wraps the existing pipeline and contains no pipeline logic of its own. `api/service.py` is the only module that imports Stages 1–6, so the route handlers stay transport-only and the planned per-user-key work has one file to change rather than five endpoints to audit. **No key is read anywhere in `api/`** — keys stay in `generation.gemini_key_rotation` (embeddings, vision) and `generation.provider_rotation` (generation, grading), exactly as the pipeline reads them today. There is no auth and no bring-your-own-key yet.
+
+| File | Responsibility |
+|---|---|
+| `api/main.py` | app, CORS, routes |
+| `api/schemas.py` | pydantic request/response models |
+| `api/service.py` | pipeline calls, job registry, upload handling |
+| `api/errors.py` | exception → HTTP mapping, message sanitising |
+| `api/test_stage8_api.py` | mocked verification, zero API calls |
+
+### Endpoints
+
+`GET /health` · `POST /documents` (202) · `GET /documents/jobs/{job_id}` · `GET /documents` · `DELETE /documents/{doc_id}` · `POST /query`
+
+The query response is always returned in full — `question`, `mode`, and three groups (`core`, `evidence`, `meta`). There is deliberately **no request flag to trim it**; the Stage 9 UI decides what to display. `evidence.sources` lists *every* retrieved chunk with its `source_number`; the UI highlights the cited ones by matching against `core.citations`. Response fields are projections of the existing types — `RankedChunk` for evidence, `AnswerResult` for `provider_used`/`model_used`/`warning`.
+
+### Two approved exceptions to "no changes in earlier stages"
+
+**1. `_extract_valid_citations` is imported from Stage 6 into `api/service.py`.** `AnswerResult.sources` is the *cited subset* and carries no source number, but the `(Source N)` markers in the answer refer to a chunk's 1-based position in the list handed to the prompt. Recovering N requires the same parser Stage 6 validated with. Importing Stage 6's own function guarantees the API's numbering cannot drift from Stage 6's; re-implementing the regex would create a second source of truth. The alternative — adding `source_number` to `SourceInfo` — would have changed Stage 6. Stage 6 is unchanged.
+
+**2. `list_documents()` was added to `embedding/vector_store.py`.** Qdrant has no "distinct values" query and no listing function existed. It lives in `vector_store` rather than `api/` because that module is deliberately the single place the Qdrant client is constructed and touched, and putting the scroll there preserves that property instead of reaching into `_get_client()` from the API layer. It is read-only, scrolls payloads with vectors excluded, and aggregates in Python. **It adds a function and changes no existing behaviour.**
+
+### Concurrency: one process, narrow lock
+
+The local embedded Qdrant store holds an exclusive file lock, so **the API must run as a single process**:
+
+```
+uvicorn api.main:app --port 8000
+```
+
+No `--workers`, and critically **no `--reload`** — reload spawns a reloader plus a worker, and the second process dies with "Storage folder data/vector_store is already accessed by another instance". For the same reason the API must not run alongside `evaluation/run_eval.py`. The README previously documented `--reload`; that was wrong and has been corrected.
+
+Route handlers are plain `def`, not `async def`: every pipeline call is blocking, so Starlette runs them in its threadpool and the event loop is never blocked.
+
+A `threading.RLock` was added to `vector_store` and wraps **only the Qdrant client calls**. It is never held across an embedding, vision or generation call — one such call was measured at 39.9s under provider congestion, and serialising those would let a single slow request stall every other request. CPU-only work between client calls (filter construction, payload copying) is also outside the lock. RLock rather than Lock because `upsert_chunks()` calls `ensure_collection()`, which takes the same lock. `GET /health` takes no lock and makes no Qdrant or provider call at all, so it stays answerable while a slow request is in flight.
+
+### Ingestion is asynchronous
+
+`POST /documents` returns **202** with a `job_id` and runs Stages 1–4 on a `ThreadPoolExecutor(max_workers=1)`; `GET /documents/jobs/{job_id}` reports `queued`/`running`/`done`/`failed`. Synchronous was rejected: a document costs one vision call per unique image plus embedding calls, and a single provider call has been measured at ~40s, so the request would outlive normal client timeouts with no progress signal. `max_workers=1` also keeps the single-writer property. Stdlib only — no new dependency. **Known limitation:** the job registry is in-memory, so job records are lost on restart (the ingested chunks themselves are durable in Qdrant).
+
+### Error mapping
+
+| Condition | Status |
+|---|---|
+| `AllModelsAndKeysExhaustedError` (and its `AllProvidersExhaustedError` subclass) | 503 + `Retry-After: 60` |
+| `EmbeddingUnavailableError` | 503, deliberately distinct message |
+| `UnsupportedFileTypeError` | 415 |
+| upload > 25 MB | 413 |
+| unknown `doc_id` / `job_id` | 404 |
+| invalid input, or `DocumentParsingError` | 422 |
+| anything else | 500, fixed generic message |
+
+The 25 MB cap sits far above the sample corpus while still refusing uploads that would make ingestion run unboundedly long. Three rules hold for every handler: no stack traces, no server filesystem paths, no key material. Ingestion exceptions embed the absolute upload path in their message, so messages pass through `sanitize_message()`, which reduces any path to its basename. The catch-all 500 reveals nothing at all — not even the exception type. Uploads are written to `data/uploads/`, already gitignored. CORS is restricted to localhost origins, since the API has no auth.
+
+An unknown `doc_id` on `/query` returns 404 **before** any provider call, so a bad request costs nothing.
+
+### Verification
+
+`api/test_stage8_api.py`: **66 mocked assertions, zero API calls** — every endpoint, every error mapping above, the `Retry-After` header, provider exhaustion, an empty-retrieval query (returns 200 with empty citations and evidence rather than crashing), citation-numbering parity against Stage 6's real parser including an out-of-range marker being discarded, and leak checks asserting no path, traceback or raw exception text reaches a response body.
+
+Live: **3 API calls** — one `POST /query` (1 embedding + 1 generation) and one tiny TXT upload (1 embedding), followed by job polling, list, delete and delete-verification, none of which cost a call.
+
+### Not a production solution
+
+Single process, no auth, no rate limiting, in-memory job state, and one-at-a-time Qdrant access. Correct for V1 and the Stage 9 UI; all four need revisiting before any real deployment, alongside Section 2d's and 2i's existing free-tier caveats.
+
+---
+
 ## 3. Data Schema (Core Contract Across All Stages)
 
 Every chunk — whether derived from text or an image — must conform to this schema before being embedded and stored. This is the single most important contract in the system; all modules must read/write it consistently.
@@ -469,13 +544,13 @@ Updated to match the code as built. The original entry named a single
 - **Output**: a full per-question transcript (question, expected vs. generated answer, retrieved pages per document, verdict, reason, raw grader response, `provider_used`, `model_used`) written to a timestamped JSON under `evaluation/results/`, plus a human-readable console summary broken down by mode.
 - **`--estimate-only`**: prints the API-call estimate and exits **without making any API calls**. Current dataset: **81** calls as a floor — **35** on the Gemini key pool (query embeddings for 23 questions + 12 coverage queries) and **46** on the answer providers (23 generation + 23 grading). A floor, not a ceiling: each retry is an additional real request.
 
-### Stage 8 — API (`api/`) — NOT STARTED (directory does not exist yet)
+### Stage 8 — API (`api/`) — BUILT (see Section 2j for the as-built detail)
 - `main.py` (FastAPI): 
   - `POST /upload` — accepts file(s), runs Stages 1–4, returns `doc_id(s)`
   - `POST /query` — accepts `{question, doc_ids, mode, answer_style}`, runs Stages 5–6, returns the answer schema from Section 3
   - `GET /health` — basic status check
 
-**Under consideration for Stage 8, not implemented and no design decided:** letting users supply their own API keys instead of relying on the server's key pool.
+**Still under consideration, not implemented and no design decided:** letting users supply their own API keys instead of relying on the server's key pool. The Stage 8 build keeps all key access inside the rotation modules and confines pipeline access to `api/service.py`, so this remains a contained change rather than an endpoint-by-endpoint one — see Section 2j.
 
 ### Stage 9 — Frontend (`frontend/`) — built last — NOT STARTED (directory does not exist yet)
 - `app.py` (Streamlit): file upload, mode selector, chat interface, citation display with expandable source text, inline image preview when an image-based source is cited
