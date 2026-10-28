@@ -111,7 +111,7 @@ This project must be built in the following stages. Each stage should be indepen
 | 5 — Retrieval & Re-ranking | Complete |
 | 6 — Answer Generation | Complete |
 | 7 — Evaluation Framework | Built — framework in place (`evaluation/run_eval.py`, `evaluation/llm_judge.py`) |
-| 8 — API Layer | Built — FastAPI app in `api/` (health, upload/ingest, list, delete, query) |
+| 8 — API Layer | Complete — FastAPI app in `api/` (health, upload/ingest, list, delete, query) |
 | 9 — Frontend UI | Not started |
 
 ### **Stage 1 — Ingestion & Parsing**

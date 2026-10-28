@@ -3,7 +3,7 @@
 
 **Version:** 1.0 (V1 Scope)
 **Companion document to:** PRD.md
-**Status:** Stages 1–6 built and verified; Stage 7 (evaluation framework) built; Stage 8 (API layer) built; Stage 9 not started
+**Status:** Stages 1–6 built and verified; Stage 7 (evaluation framework) built; Stage 8 (API layer) complete; Stage 9 not started
 **Last Updated:** 2026-10-28 (Section 2j added — Stage 8 FastAPI layer: endpoint shapes, single-process/narrow-lock concurrency model, asynchronous ingestion, error mapping, and the two approved exceptions to "no changes in earlier stages". Previously 2026-10-27: documentation synced to the code as built: Stage 7 module list corrected to the three real dataset files and the actual verdict scale, Evaluation tech-stack row corrected — RAGAS is not called, Stage 8/9 marked not started. Section 2i, added 2026-10-26, documents the move of answer generation and grading from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
 
 ---

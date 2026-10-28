@@ -12,7 +12,7 @@
 [![Streamlit](https://img.shields.io/badge/Streamlit-Frontend-FF4B4B?style=flat&logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat)](LICENSE)
 
-**Build status:** Stages 1–6 complete and independently verified · Stage 7 evaluation framework built · Stage 8 API layer built · Stage 9 not started
+**Build status:** Stages 1–6 complete and independently verified · Stage 7 evaluation framework built · Stage 8 API layer complete · Stage 9 not started
 
 </div>
 
@@ -48,7 +48,7 @@ No model training is required. DocSense orchestrates pre-trained LLM, embedding,
 | 5 — Retrieval & Re-ranking | ✅ Complete | Mode-aware candidate retrieval, re-ranked for precision |
 | 6 — Answer Generation | ✅ Complete | Generates the final cited answer from retrieved context |
 | 7 — Evaluation Framework | ✅ Built | Two separately-reported metrics — a deterministic retrieved-page check and LLM-graded answer correctness on a fixed verdict scale — plus a multi-document coverage check |
-| 8 — API Layer | ✅ Built | FastAPI endpoints for health, upload/ingest, list, delete and query |
+| 8 — API Layer | ✅ Complete | FastAPI endpoints for health, upload/ingest, list, delete and query |
 | 9 — Frontend UI | ⏳ Not started | Streamlit interface, built last (`frontend/` does not exist yet) |
 
 Every completed stage has been manually tested against 6 real sample documents (including real-world legal contracts from the [CUAD dataset](https://www.atticusprojectai.org/cuad)) and independently verified — not just accepted on the agent's word.
@@ -77,7 +77,7 @@ Answer Generation (mandatory page citation)
 Evaluation (retrieval accuracy + LLM-graded correctness)   ← Stage 7, built
       │
       ▼
-FastAPI Layer (single process, one shared Qdrant client)   ← Stage 8, built
+FastAPI Layer (single process, one shared Qdrant client)   ← Stage 8, complete
       │
       ▼
 Streamlit UI                                               ← Stage 9, not started
@@ -181,7 +181,7 @@ DocSense/
 └── README.md
 ```
 
-Not created yet: `api/` (Stage 8) and `frontend/` (Stage 9). `evaluation/results/` is created on the first completed evaluation run and is gitignored.
+Not created yet: `frontend/` (Stage 9). `evaluation/results/` is created on the first completed evaluation run and is gitignored.
 
 ## Getting Started
 
@@ -356,7 +356,7 @@ A separate set of **12 multi-document coverage queries** checks how often a requ
 
 | Version | Scope |
 |---|---|
-| **V1** (in progress — Stages 1–8 built, UI remaining) | PDF, DOCX, TXT + embedded image analysis, 3 Q&A modes |
+| **V1** (in progress — Stages 1–8 complete, UI remaining) | PDF, DOCX, TXT + embedded image analysis, 3 Q&A modes |
 | V2 | PPTX, XLSX/CSV support |
 | V3 | Password-protected PDFs, legacy `.DOC`, handwriting OCR |
 | V4 | Multi-user support, persistent history, confidence scoring UI |
