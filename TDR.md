@@ -4,7 +4,7 @@
 **Version:** 1.0 (V1 Scope)
 **Companion document to:** PRD.md
 **Status:** Stages 1–6 built and verified; Stage 7 (evaluation framework) built; Stage 8 (API layer) complete; Stage 9 not started
-**Last Updated:** 2026-11-01 (Section 2k added — Stage 7 follow-up: per-document retrieval guarantee and opening chunk for legal/multi_doc, three judge rules, grader independence, and the measured before/after results. Previously 2026-10-28: Section 2j added — Stage 8 FastAPI layer: endpoint shapes, single-process/narrow-lock concurrency model, asynchronous ingestion, error mapping, and the two approved exceptions to "no changes in earlier stages". Previously 2026-10-27: documentation synced to the code as built: Stage 7 module list corrected to the three real dataset files and the actual verdict scale, Evaluation tech-stack row corrected — RAGAS is not called, Stage 8/9 marked not started. Section 2i, added 2026-10-26, documents the move of answer generation and grading from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
+**Last Updated:** 2026-11-01 (Section 2k added — Stage 7 follow-up: per-document retrieval guarantee and opening chunk for legal/multi_doc, three judge rules, grader independence, and the measured before/after results; Section 2f's status now points to 2k. Previously 2026-10-28: Section 2j added — Stage 8 FastAPI layer: endpoint shapes, single-process/narrow-lock concurrency model, asynchronous ingestion, error mapping, and the two approved exceptions to "no changes in earlier stages". Previously 2026-10-27: documentation synced to the code as built: Stage 7 module list corrected to the three real dataset files and the actual verdict scale, Evaluation tech-stack row corrected — RAGAS is not called, Stage 8/9 marked not started. Section 2i, added 2026-10-26, documents the move of answer generation and grading from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
 
 ---
 
@@ -236,10 +236,10 @@ This meant rotation had nowhere useful to go on a 429 — the newer keys couldn'
 
 ---
 
-## 2f. Known Limitation: multi_doc Mode Can Exclude a Requested Document Entirely (Flagged, Not Fixed)
+## 2f. Known Limitation: multi_doc Mode Can Exclude a Requested Document Entirely (Addressed in Section 2k)
 
 **Flagged date:** 2026-09-24 (Stage 6 manual test run)
-**Status:** Known limitation — deliberately deferred to Stage 7 evaluation, not fixed now.
+**Status:** Addressed in Section 2k (2026-11-01). With the per-document retrieval guarantee, all 12 coverage queries had full coverage: **12 of 12**, against 5 of 12 before. That is a retrieval-only measurement on those 12 queries; the full suite has not been re-run with the change. The section below is kept as the original record.
 
 ### The problem
 
@@ -251,7 +251,7 @@ In `multi_doc` mode, `retrieve_and_rerank()` retrieves candidates across all req
 
 This is a ranking-policy question (should multi_doc guarantee per-document representation, and if so how many chunks minimum per document, at what cost to overall relevance ranking), not a bug with an obvious one-line fix. Stage 7's evaluation framework is the right place to measure how often this actually degrades answer quality across a labeled test set, before choosing a fix.
 
-**Candidate fixes to evaluate during Stage 7** (not yet implemented, not yet decided between):
+**Candidate fixes to evaluate during Stage 7** (Section 2k implemented both):
 - Widen the multi_doc candidate pool before reranking (retrieve more per-document candidates, so a lower-scoring document still has chunks in play).
 - Guarantee at least 1 chunk per requested `doc_id` in the final top-k (e.g., reserve one slot per document, fill remaining slots by global rank).
 
@@ -483,7 +483,7 @@ The result is sorted by `rerank_score`, and the source number is still the chunk
 
 **Rejected:** calling `retrieve()` once per document, which costs one embedding call per document; adding a new `vector_store` function, since `search()` already filters by `doc_id`.
 
-**Trade-offs.** Prompts get longer (up to 8 chunks), so per-minute token limits, Groq's in particular, are reached sooner. A single-document legal question always keeps the old top-5 (5 + 1 opening chunk ≤ 8). With 4 documents, priorities 1–2 alone can fill the cap, so part of the old global top-5 can be dropped (md_10 ends at 2 chunks per document, 8 in total).
+**Trade-offs.** Prompts get longer (up to 8 chunks), so per-minute token limits, Groq's in particular, are reached sooner. A single-document legal question always keeps the old top-5 (5 + 1 opening chunk ≤ 8). With 4 documents, priorities 1–2 alone can fill the cap, so part of the old global top-5 can be dropped (md_10 ends at 2 chunks per document, 8 in total). The guarantee itself is bounded by the cap: every document gets at least two chunks only up to 4 documents, and at least one up to 8. Above 8 requested documents, some get none.
 
 ### Judge rules (`evaluation/llm_judge.py`)
 
@@ -548,7 +548,7 @@ What this re-check can and cannot attribute:
 - **Q1** is the cleanest retrieval case: same writer, and the only context change is the added opening chunk, which the answer cites.
 - **Q12:** the title appears only in the opening chunk, which the old context lacked. The new answer cites it.
 - **Q6 and Q14:** the context was the same as before (the opening chunk was already in the old top-5), so the change came from the writer.
-- **Judge rules (Q8, Q10, Q15, Q16):** Q8 and Q16 did not change, and their new answers are weaker (Q8 omits the date; Q16 says no expiration date is given and does not quote the clause). Q10 became correct, but its new answer does not hedge, so rule 2 was not exercised. Q15 became correct with the same quoted sentence as before, and the grader's reason cites the blank placeholder. That is consistent with rule 1, but the writer and grader also changed. Re-grading the old answers would isolate the rule effect; that has not been done.
+- **Judge rules (Q8, Q10, Q15, Q16):** Q8 and Q16 did not change, and their new answers are weaker. Q8 quotes the "executed this Agreement as of the date below" line and stops before the signature dates; Q16 says no expiration date is given. In both cases the missing text was in the retrieved context (checked against the stored chunks: Gridiron `p5_c0` holds "Date: 1/27/2020", TransMontaigne `p4_c1` holds "This Agreement shall remain in effect until terminated by the Parties"). Q10 became correct, but its new answer does not hedge, so rule 2 was not exercised. Q15 became correct with the same quoted sentence as before, and the grader's reason cites the blank placeholder. That is consistent with rule 1, but the writer and grader also changed. Re-grading the old answers would isolate the rule effect; that has not been done.
 - **Substring-check caveat.** The retrieval-only run's "expected text found in the retrieved context" check (11/11 short expected answers) is weak evidence for the document-name questions. For Q1 and Q6 the title also appears in repeated page headers (`…SUPPLY AGREEMENT (cont'd)`), so the check passes without the opening chunk. Only Q12's title depends on the opening chunk.
 - **Open, not fixed:** Q21's answer stops mid-table, probably at the 1024-token output cap. Changing that cap is a Stage 6 change and was out of scope.
 - **Not re-run:** the 12 questions that were already correct, so any regressions among them are unmeasured.

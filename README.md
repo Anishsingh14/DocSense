@@ -376,7 +376,8 @@ Free-tier APIs fail in ways that are easy to mistake for bugs, so a few things a
 
 Documented honestly rather than hidden. Full reasoning for each is in [`TDR.md`](./TDR.md):
 
-- **A requested document can be missing from a multi-document answer** — retrieval returns one global top-k across all requested documents, with no guarantee each contributes a chunk. Flagged, not yet fixed; the 12 coverage queries exist to measure it. *(TDR 2f)*
+- **Multi-document coverage is guaranteed at retrieval, within a cap.** Retrieval used to return one global top-k across all requested documents, so a requested document could be left out entirely. It now reserves chunks for every requested document, within an 8-chunk context cap: at least two each for up to 4 documents, at least one each for up to 8. On the 12 coverage queries this gave full coverage on 12 of 12, against 5 of 12 before. That is a retrieval measurement; the full evaluation suite has not been re-run with the change. *(TDR 2f, 2k)*
+- **Answer writers sometimes quote selectively or answer "no such clause" wrongly.** In the 11-question re-check, one answer quoted the "executed this Agreement as of the date below" line and stopped before the signature dates it introduces (Q8). Another said the contract gives no expiration date, although the retrieved context contained "This Agreement shall remain in effect until terminated by the Parties" (Q16). In both cases the text had been retrieved, so these are generation behaviours, not retrieval misses. *(TDR 2k)*
 - **"Not found" behaviour is not covered by a correctness eval entry yet** — no labeled question currently tests whether the system correctly reports that information is absent. *(TDR 2g)*
 - **Embeddings and image analysis are still single-vendor.** They remain on the Gemini key pool, so a Gemini-wide outage still blocks retrieval even when several answer providers are healthy. This is the largest remaining shared-fate risk. *(TDR 2i)*
 - **Citation formats differ by model.** The parser accepts any provider that emits `(Source N)`, but adherence is per-model behaviour, not a guarantee — which is why `provider_used` is recorded on every result. Verdicts are not strictly comparable across providers. *(TDR 2i)*
@@ -387,7 +388,7 @@ Documented honestly rather than hidden. Full reasoning for each is in [`TDR.md`]
 ## Documentation
 
 - [`PRD.md`](./PRD.md) — Product requirements, scope, and build stages
-- [`TDR.md`](./TDR.md) — Technical architecture, schemas, module design, and the full log of documented deviations from the original spec (Sections 2a–2i)
+- [`TDR.md`](./TDR.md) — Technical architecture, schemas, module design, and the full log of documented deviations from the original spec (Sections 2a–2k)
 
 ## License
 
