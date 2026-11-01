@@ -341,6 +341,7 @@ def call_with_provider_rotation(
     messages: List[dict],
     max_tokens: int = 1024,
     temperature: float = 0.0,
+    avoid_providers: Optional[List[str]] = None,
 ) -> Tuple[str, str, str]:
     """Sends one chat completion, rotating providers on failure.
 
@@ -371,6 +372,14 @@ def call_with_provider_rotation(
 
     _log_disabled_providers_once()
 
+    # avoid_providers (ADDED, TDR Section 2k): env var names to steer
+    # away from — used so a grader is not the provider that wrote the
+    # answer. Avoided providers are tried only as a last resort, and
+    # avoid-mode calls never move the sticky index, so grading cannot
+    # pull generation off the provider it is settled on. Cooldowns and
+    # session removals stay shared, since they describe provider health.
+    avoid = {p for p in (avoid_providers or ()) if p}
+
     attempted: List[str] = []
     last_exception: Exception = None  # type: ignore[assignment]
     skip_this_question: set = set()
@@ -381,12 +390,22 @@ def call_with_provider_rotation(
         if not eligible:
             break
 
-        # Honour stickiness: prefer the current index if it is
-        # eligible, else advance to the next eligible one in order.
-        idx = _sticky_index if _sticky_index in eligible else eligible[0]
+        if avoid:
+            preferred = [i for i in eligible if PROVIDERS[i].env_var not in avoid]
+            idx = preferred[0] if preferred else eligible[0]
+        else:
+            # Honour stickiness: prefer the current index if it is
+            # eligible, else advance to the next eligible one in order.
+            idx = _sticky_index if _sticky_index in eligible else eligible[0]
         provider = PROVIDERS[idx]
         label = _label(provider)
         attempted.append(f"{provider.env_var}:{provider.model}")
+        if provider.env_var in avoid:
+            print(
+                f"  [{_ts()}] [provider] no other provider available — using "
+                f"avoided provider {provider.env_var} as a last resort",
+                flush=True,
+            )
 
         print(f"  [{_ts()}] [provider] trying {label}...", flush=True)
         start = time.monotonic()
@@ -449,12 +468,16 @@ def call_with_provider_rotation(
                 )
 
             # Advance stickiness past the failed provider.
-            remaining = [i for i in _eligible(time.monotonic()) if i not in skip_this_question]
-            _sticky_index = remaining[0] if remaining else 0
+            if not avoid:
+                remaining = [
+                    i for i in _eligible(time.monotonic()) if i not in skip_this_question
+                ]
+                _sticky_index = remaining[0] if remaining else 0
             continue
 
         elapsed = time.monotonic() - start
-        _sticky_index = idx  # stay here for subsequent questions
+        if not avoid:
+            _sticky_index = idx  # stay here for subsequent questions
         served_note = (
             f" (alias {provider.model} -> served by {model_used})"
             if model_used != provider.model

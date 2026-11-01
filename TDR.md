@@ -4,7 +4,7 @@
 **Version:** 1.0 (V1 Scope)
 **Companion document to:** PRD.md
 **Status:** Stages 1–6 built and verified; Stage 7 (evaluation framework) built; Stage 8 (API layer) complete; Stage 9 not started
-**Last Updated:** 2026-10-28 (Section 2j added — Stage 8 FastAPI layer: endpoint shapes, single-process/narrow-lock concurrency model, asynchronous ingestion, error mapping, and the two approved exceptions to "no changes in earlier stages". Previously 2026-10-27: documentation synced to the code as built: Stage 7 module list corrected to the three real dataset files and the actual verdict scale, Evaluation tech-stack row corrected — RAGAS is not called, Stage 8/9 marked not started. Section 2i, added 2026-10-26, documents the move of answer generation and grading from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
+**Last Updated:** 2026-11-01 (Section 2k added — Stage 7 follow-up: per-document retrieval guarantee and opening chunk for legal/multi_doc, three judge rules, grader independence, and the measured before/after results. Previously 2026-10-28: Section 2j added — Stage 8 FastAPI layer: endpoint shapes, single-process/narrow-lock concurrency model, asynchronous ingestion, error mapping, and the two approved exceptions to "no changes in earlier stages". Previously 2026-10-27: documentation synced to the code as built: Stage 7 module list corrected to the three real dataset files and the actual verdict scale, Evaluation tech-stack row corrected — RAGAS is not called, Stage 8/9 marked not started. Section 2i, added 2026-10-26, documents the move of answer generation and grading from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
 
 ---
 
@@ -450,6 +450,112 @@ Live: **3 API calls** — one `POST /query` (1 embedding + 1 generation) and one
 ### Not a production solution
 
 Single process, no auth, no rate limiting, in-memory job state, and one-at-a-time Qdrant access. Correct for V1 and the Stage 9 UI; all four need revisiting before any real deployment, alongside Section 2d's and 2i's existing free-tier caveats.
+
+---
+
+## 2k. Retrieval Guarantees, Judge Rules & Grader Independence (Stage 7 Follow-up)
+
+**Decision date:** 2026-11-01
+**Status:** Active for V1 build. Addresses the Section 2f coverage gap for the evaluated set. `single_doc` retrieval, Stage 6 prompts, absence detection and citation parsing are unchanged.
+
+### What the first full Stage 7 run showed
+
+The run of 2026-10-31 (`evaluation/results/eval_results_20261031T164332Z.json`) measured all 23 questions: 12 correct, 7 partially_correct, 4 incorrect. Page-level retrieval was 21/23; 5 of the 12 coverage queries had full coverage (25 of 32 requested documents). The transcripts showed three separate problems:
+
+1. **Whole documents dropped (Section 2f).** `multi_doc` took one global top-5 across all requested documents, so a document whose chunks all scored lower got no context at all.
+2. **Opening-page facts missing.** Titles, parties and dates sit in a contract's opening chunk, and the global top-5 did not always include it. Q1 (XLI document name) and Q23 (parties across two contracts) both failed page-level retrieval because XLI's page 1 was missing.
+3. **Grading.** The judge could mark down an answer that reproduced a blank placeholder (`August __, 2019`) or quoted the expected text after a hedge, and nothing stopped a `multi_doc` answer being graded `correct` while a requested document went unaddressed. Rotation is sticky, so **every one of the 23 questions was graded by the provider that wrote the answer** (Groq for Q1–Q5, Cohere for Q6–Q23).
+
+### Retrieval changes (`retrieval/retriever.py`, `retrieval/pipeline.py`)
+
+**Candidates.** For `legal` and `multi_doc`, `retrieve()` adds each requested document's opening chunk (lowest page, text before image, lowest chunk index; `find_opening_chunk()`), and for `multi_doc` each document's own top 5 candidates (`MULTI_DOC_CANDIDATES_PER_DOC`). These reuse the one query vector with local Qdrant reads through the existing `search()`, sized by `count_points(doc_id)`, so **no extra embedding call is made**. That is a full scan of each requested document: cheap at V1 scale (5–19 chunks per sample document), and worth revisiting for long documents.
+
+**Selection.** The whole pool is reranked, so every pick has a real `rerank_score` for `confidence_check`. `_select_context()` then picks in priority order under a hard cap of **8 chunks** (`MAX_CONTEXT_CHUNKS`):
+
+| Priority | Mode | Pick |
+|---|---|---|
+| 1 | multi_doc | each document's best chunk |
+| 2 | legal, multi_doc | each document's opening chunk |
+| 3 | multi_doc | next-best chunks until each document has 2 (`MIN_CHUNKS_PER_DOC`; the opening chunk counts) |
+| 4 | legal, multi_doc | the global top-5, as before |
+
+The result is sorted by `rerank_score`, and the source number is still the chunk's position in the prompt list. `single_doc` keeps the old path exactly (`rerank(..., top_k=5)`).
+
+**Rejected:** calling `retrieve()` once per document, which costs one embedding call per document; adding a new `vector_store` function, since `search()` already filters by `doc_id`.
+
+**Trade-offs.** Prompts get longer (up to 8 chunks), so per-minute token limits, Groq's in particular, are reached sooner. A single-document legal question always keeps the old top-5 (5 + 1 opening chunk ≤ 8). With 4 documents, priorities 1–2 alone can fill the cap, so part of the old global top-5 can be dropped (md_10 ends at 2 chunks per document, 8 in total).
+
+### Judge rules (`evaluation/llm_judge.py`)
+
+The grading prompt gains a `{grading_rules}` block that takes precedence over the general guidance:
+
+1. **Blank placeholders.** If the expected answer contains a blank such as `__` and the answer reproduces it as it appears in the source, that is correct.
+2. **Verbatim quotes.** Quoting the expected text verbatim (ignoring case and whitespace) is correct, even after a hedge.
+3. **`multi_doc` only.** The answer must address each requested document with clear attribution, otherwise the verdict cannot be `correct`. The judge also gets a source → document map ("Source 1 = …"), because answers cite by `(Source N)` and would otherwise look unattributed.
+
+### Grader independence (`generation/provider_rotation.py`, `evaluation/llm_judge.py`, `evaluation/run_eval.py`)
+
+`call_with_provider_rotation()` takes `avoid_providers`, and `grade_answer()` passes the writer. The grader is the first eligible provider other than the writer. The writer is used only as a last resort, with a log line saying so. Avoid-mode calls never move the sticky index, so grading cannot pull generation off its provider. Cooldowns and session removals stay shared, because they describe provider health. Each record now carries `grader_independent` (`None` for not_measured records). The change is about 20 lines of `provider_rotation.py`.
+
+### Measured results
+
+**Retrieval only: 23 questions and coverage queries md_01–md_10, no generation.** These numbers were **tallied from partial logs**: the script's own summary never flushed before that run was cancelled, so they come from its per-question log lines, not from a saved results file. The "before" figures are from the 2026-10-31 results JSON, not from re-running the old algorithm.
+
+| Metric | Before | After |
+|---|---|---|
+| Page-level retrieval | 21/23 | **23/23** (Q1 and Q23 now reach page 1) |
+| Average context, all 23 questions | 5.00 | 5.61 (legal 5.53, single_doc 5.00, multi_doc 6.67) |
+
+**Coverage, md_01–md_12.** md_01–md_10 come from the cancelled retrieval-only run's logs, md_11–md_12 from the re-check below. Chunks per document are in `doc_ids` order.
+
+| Query | Docs | Before | After | Context | Chunks per doc |
+|---|---|---|---|---|---|
+| md_01 | 3 | gap | full | 8 | 2 / 2 / 4 |
+| md_02 | 2 | full | full | 7 | 2 / 5 |
+| md_03 | 3 | gap | full | 7 | 2 / 2 / 3 |
+| md_04 | 3 | full | full | 8 | 3 / 3 / 2 |
+| md_05 | 2 | full | full | 7 | 3 / 4 |
+| md_06 | 3 | gap | full | 8 | 2 / 4 / 2 |
+| md_07 | 2 | gap | full | 7 | 2 / 5 |
+| md_08 | 2 | full | full | 6 | 4 / 2 |
+| md_09 | 2 | gap | full | 7 | 5 / 2 |
+| md_10 | 4 | gap | full | 8 | 2 / 2 / 2 / 2 |
+| md_11 | 3 | gap | full | 8 | 4 / 2 / 2 |
+| md_12 | 3 | full | full | 8 | 2 / 3 / 3 |
+| **Total** | 32 | **5/12 full, 25/32 docs** | **12/12 full, 32/32 docs** | avg 7.4 (before 5) | |
+
+**11-question re-check (2026-11-01, 292 s).** The 11 questions that were not `correct` in the 2026-10-31 run (Q1, Q6, Q8, Q10, Q12–Q16, Q21, Q23) ran through `run_question()` with the new retrieval and judge rules. Calls: 13 embeddings (11 questions plus md_11 and md_12) with no failures, and 23 answer-provider attempts, of which one failed (an NVIDIA 429; Cohere graded that question instead). 35 calls were planned.
+
+| Q | Mode | Verdict before → after | Writer before → now | Grader now | Answer contains expected text |
+|---|---|---|---|---|---|
+| Q1 | legal | incorrect → **correct** | Groq → Groq | NVIDIA | yes |
+| Q6 | legal | incorrect → **correct** | Cohere → Groq | NVIDIA | yes |
+| Q8 | legal | partially_correct → partially_correct | Cohere → Groq | NVIDIA | no |
+| Q10 | legal | partially_correct → **correct** | Cohere → Groq | NVIDIA | yes |
+| Q12 | legal | incorrect → **correct** | Cohere → Groq | NVIDIA | yes |
+| Q13 | legal | partially_correct → **correct** | Cohere → Groq | NVIDIA | yes |
+| Q14 | legal | incorrect → **correct** | Cohere → Groq | NVIDIA | yes |
+| Q15 | legal | partially_correct → **correct** | Cohere → Groq | NVIDIA | no (writes `August __ , 2019`, with an extra space) |
+| Q16 | legal | partially_correct → partially_correct | Cohere → Groq | Cohere | no |
+| Q21 | multi_doc | partially_correct → partially_correct | Cohere → Groq | Cohere | expected answer is a paraphrase; all 3 key facts present |
+| Q23 | multi_doc | partially_correct → **correct** | Cohere → Groq | Cohere | expected answer is a paraphrase; all 4 parties named |
+
+For these 11 questions the verdicts went from 0 correct / 7 partially_correct / 4 incorrect to 8 / 3 / 0. `grader_independent` was true for all 11. In the 2026-10-31 run it would have been false for all 23.
+
+What this re-check can and cannot attribute:
+
+- **The writer changed for 10 of the 11 questions** (Cohere → Groq: this process started on Groq and Groq stayed healthy). Most verdict changes therefore mix retrieval, judge-rule, writer and grader effects.
+- **Q1** is the cleanest retrieval case: same writer, and the only context change is the added opening chunk, which the answer cites.
+- **Q12:** the title appears only in the opening chunk, which the old context lacked. The new answer cites it.
+- **Q6 and Q14:** the context was the same as before (the opening chunk was already in the old top-5), so the change came from the writer.
+- **Judge rules (Q8, Q10, Q15, Q16):** Q8 and Q16 did not change, and their new answers are weaker (Q8 omits the date; Q16 says no expiration date is given and does not quote the clause). Q10 became correct, but its new answer does not hedge, so rule 2 was not exercised. Q15 became correct with the same quoted sentence as before, and the grader's reason cites the blank placeholder. That is consistent with rule 1, but the writer and grader also changed. Re-grading the old answers would isolate the rule effect; that has not been done.
+- **Substring-check caveat.** The retrieval-only run's "expected text found in the retrieved context" check (11/11 short expected answers) is weak evidence for the document-name questions. For Q1 and Q6 the title also appears in repeated page headers (`…SUPPLY AGREEMENT (cont'd)`), so the check passes without the opening chunk. Only Q12's title depends on the opening chunk.
+- **Open, not fixed:** Q21's answer stops mid-table, probably at the 1024-token output cap. Changing that cap is a Stage 6 change and was out of scope.
+- **Not re-run:** the 12 questions that were already correct, so any regressions among them are unmeasured.
+
+**Not claimed.** No answer-quality improvement is claimed beyond what the 11-question re-check above shows. The full 23-question suite has not been re-run with the new retrieval and judge rules.
+
+**Mocked verification:** 38/38 checks on the new retrieval, judge-rule and avoid-provider logic (a throwaway script, since deleted), and the Stage 8 suite `api/test_stage8_api.py` still passes 66/66.
 
 ---
 

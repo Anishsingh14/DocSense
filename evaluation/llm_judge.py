@@ -22,7 +22,7 @@ setup needed.
 from __future__ import annotations
 
 import re
-from typing import Literal, TypedDict
+from typing import List, Literal, Optional, TypedDict
 
 from generation.provider_rotation import call_with_provider_rotation
 
@@ -56,6 +56,8 @@ Generated answer (to grade): {generated_answer}
 
 Grade the generated answer against the expected answer, allowing for reasonable wording variation, paraphrasing, or additional correct detail — the generated answer does not need to match word-for-word to be correct. Judge substantive factual agreement only.
 
+{grading_rules}
+
 Respond with EXACTLY two lines, in this exact format, and nothing else:
 VERDICT: <correct|partially_correct|incorrect>
 REASON: <one sentence explaining the verdict>
@@ -65,6 +67,41 @@ Verdict definitions:
 - partially_correct: the generated answer is factually consistent with the expected answer but is incomplete, missing a material part of it, or only partially addresses the question.
 - incorrect: the generated answer contradicts the expected answer, states the information was not found when the expected answer shows it should have been, or is substantively wrong/unrelated.
 """
+
+
+# ADDED (TDR Section 2k): rules for three verdict errors seen in the
+# first full Stage 7 run — a faithfully reproduced blank placeholder
+# graded wrong, a verbatim quote graded wrong because the answer hedged
+# first, and a multi_doc answer graded correct while one requested
+# document went unaddressed.
+_BASE_RULES = """Additional grading rules (these take precedence over the general guidance above where they apply):
+1. Blank placeholders: source documents sometimes contain unfilled blanks such as "__", "______" or "[    ]". If the expected answer contains such a blank and the generated answer reproduces it exactly as it appears in the source, that is correct — reproducing the blank is the faithful answer, not a failure to answer.
+2. Verbatim quotes: if the generated answer quotes the expected answer's text verbatim (ignoring differences in capitalisation and whitespace), it is correct, even if it hedges first or says the information is unclear."""
+
+_MULTI_DOC_RULE = """
+3. Multiple documents: this question asked about each of these documents: {documents}.{source_map} A correct answer must address EACH of them with clear attribution, so it is clear which statement applies to which document. If any requested document is not addressed, the verdict must not be "correct": use "partially_correct" if the documents it does address are answered correctly, otherwise "incorrect"."""
+
+
+def _build_grading_rules(
+    mode: Optional[str],
+    requested_documents: Optional[List[str]],
+    source_documents: Optional[List[str]],
+) -> str:
+    rules = _BASE_RULES
+    if mode == "multi_doc" and requested_documents:
+        # The answer cites by "(Source N)", so the judge needs N -> doc to
+        # see attribution at all; without it every marker-only answer
+        # would look unattributed.
+        source_map = ""
+        if source_documents:
+            pairs = ", ".join(
+                f"Source {i} = {d}" for i, d in enumerate(source_documents, start=1)
+            )
+            source_map = f" The answer's source markers refer to: {pairs}."
+        rules += _MULTI_DOC_RULE.format(
+            documents=", ".join(requested_documents), source_map=source_map
+        )
+    return rules
 
 
 class GradingResult(TypedDict):
@@ -79,9 +116,22 @@ class GradingResult(TypedDict):
     model_used: str  # the model that actually served the grading
     # call, as reported by the provider itself (differs from the
     # configured id for the openrouter/free alias).
+    grader_independent: bool  # ADDED (TDR Section 2k): False only when
+    # the grader is the same provider that wrote the answer, which
+    # happens solely as a last resort when no other provider can serve.
+    # A model grading its own output is a known source of leniency, so
+    # verdicts are only fully comparable where this is True.
 
 
-def grade_answer(question: str, generated_answer: str, expected_answer: str) -> GradingResult:
+def grade_answer(
+    question: str,
+    generated_answer: str,
+    expected_answer: str,
+    writer_provider: Optional[str] = None,
+    mode: Optional[str] = None,
+    requested_documents: Optional[List[str]] = None,
+    source_documents: Optional[List[str]] = None,
+) -> GradingResult:
     """Grades a generated answer against a labeled expected answer.
 
     Args:
@@ -102,8 +152,9 @@ def grade_answer(question: str, generated_answer: str, expected_answer: str) -> 
         question=question,
         expected_answer=expected_answer,
         generated_answer=generated_answer,
+        grading_rules=_build_grading_rules(mode, requested_documents, source_documents),
     )
-    raw_response, provider_used, model_used = _call_llm(prompt)
+    raw_response, provider_used, model_used = _call_llm(prompt, avoid_provider=writer_provider)
     verdict, reason = _parse_grading_response(raw_response)
 
     return {
@@ -112,6 +163,9 @@ def grade_answer(question: str, generated_answer: str, expected_answer: str) -> 
         "raw_response": raw_response,
         "provider_used": provider_used,
         "model_used": model_used,
+        # No writer (empty-retrieval short-circuit made no LLM call) is
+        # trivially independent.
+        "grader_independent": writer_provider is None or provider_used != writer_provider,
     }
 
 
@@ -154,8 +208,9 @@ def _parse_grading_response(raw_response: str) -> tuple:
     return verdict, reason
 
 
-def _call_llm(prompt: str) -> tuple:
-    """Sends the grading prompt to the current answer provider.
+def _call_llm(prompt: str, avoid_provider: Optional[str] = None) -> tuple:
+    """Sends the grading prompt to an answer provider, steering away
+    from `avoid_provider` (the writer) unless nothing else can serve.
 
     Returns:
         (raw_response_text, provider_used, model_used). Same
@@ -163,5 +218,6 @@ def _call_llm(prompt: str) -> tuple:
         answer_with_citations.py's _call_llm — see module docstring.
     """
     return call_with_provider_rotation(
-        [{"role": "user", "content": prompt}]
+        [{"role": "user", "content": prompt}],
+        avoid_providers=[avoid_provider] if avoid_provider else None,
     )

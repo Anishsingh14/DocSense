@@ -218,6 +218,9 @@ class QuestionRecord(TypedDict):
     # land on different providers for the same question, and a verdict
     # needs to be attributable to whoever actually issued it.
     grading_model: Optional[str]
+    grader_independent: Optional[bool]  # ADDED (TDR Section 2k): True
+    # when the grader is a different provider from the writer. None only
+    # for not_measured records, where no grading happened at all.
     grading_raw_response: str
     error: Optional[str]  # populated instead of the above fields if
     # this question raised an exception, so one failure doesn't crash
@@ -408,7 +411,15 @@ def run_question(eval_q: EvalQuestion) -> QuestionRecord:
         )
         generated_answer = result["answer"]
 
-        grading = grade_answer(eval_q["question"], generated_answer, eval_q["expected_answer"])
+        grading = grade_answer(
+            eval_q["question"],
+            generated_answer,
+            eval_q["expected_answer"],
+            writer_provider=result.get("provider_used"),
+            mode=eval_q["mode"],
+            requested_documents=eval_q["doc_ids"],
+            source_documents=[c["doc_id"] for c in chunks],
+        )
 
         return {
             **base,
@@ -423,6 +434,7 @@ def run_question(eval_q: EvalQuestion) -> QuestionRecord:
             "verdict_reason": grading["reason"],
             "grading_provider": grading.get("provider_used"),
             "grading_model": grading.get("model_used"),
+            "grader_independent": grading.get("grader_independent"),
             "grading_raw_response": grading["raw_response"],
             "error": None,
             "error_kind": None,
@@ -513,6 +525,7 @@ def _unmeasured_record(base: dict, exc: Exception, error_kind: str) -> QuestionR
         "verdict_reason": f"NOT MEASURED ({error_kind}): {type(exc).__name__}: {exc}",
         "grading_provider": None,
         "grading_model": None,
+        "grader_independent": None,  # no grading happened
         "grading_raw_response": "",
         "error": f"{type(exc).__name__}: {exc}",
         "error_kind": error_kind,
