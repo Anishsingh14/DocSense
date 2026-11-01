@@ -145,7 +145,18 @@ _MODE_INSTRUCTIONS = {
         "and note where they agree and where they differ. Cite the "
         "Source label for every point (see citation instructions "
         "below) — the source document and page are already attached "
-        "to that label."
+        "to that label. "
+        # ADDED (TDR Section 2k, authorised Stage 6 exception, multi_doc
+        # only). The 2026-11-01 re-check's Q21 answer called seven
+        # sources from two contracts "all four documents" and was cut
+        # off inside a markdown table. Appended rather than reworded, so
+        # the original instruction above is unchanged; legal and
+        # single_doc instructions are not touched.
+        "Several sources can come from the same document, and each "
+        "Source label names its document. Refer to each document by its "
+        "name, and never describe or count sources as documents. Give "
+        "short bullets per document, grouped under that document's "
+        "name. Do not use tables."
     ),
     "legal": (
         "You are in legal/clause precision mode. Quote the exact "

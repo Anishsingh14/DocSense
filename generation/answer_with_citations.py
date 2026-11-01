@@ -153,6 +153,13 @@ load_dotenv()
 # matching it as a suffix of some other word (e.g. "Resource 1").
 _SOURCE_NUM_RE = re.compile(r"\bSource\s+(\d+)")
 
+# ADDED (TDR Section 2k, authorised Stage 6 exception, multi_doc only).
+# A multi_doc answer covers several documents, and the 2026-11-01
+# re-check's Q21 answer was cut off mid-answer at the rotation default
+# of 1024 output tokens. legal and single_doc keep that default: their
+# call to _call_llm is unchanged.
+MULTI_DOC_MAX_OUTPUT_TOKENS = 2048
+
 
 class SourceInfo(TypedDict):
     doc_name: str
@@ -214,7 +221,12 @@ def generate_answer(
         }
 
     prompt = build_prompt(question, chunks, mode, answer_style)
-    raw_answer, provider_used, model_used = _call_llm(prompt)
+    if mode == "multi_doc":
+        raw_answer, provider_used, model_used = _call_llm(
+            prompt, max_tokens=MULTI_DOC_MAX_OUTPUT_TOKENS
+        )
+    else:
+        raw_answer, provider_used, model_used = _call_llm(prompt)
 
     cited_indices, discarded_count = _extract_valid_citations(raw_answer, len(chunks))
     used_chunks = [chunks[i] for i in cited_indices]
@@ -284,8 +296,12 @@ def _chunk_to_source_info(chunk: dict) -> SourceInfo:
     }
 
 
-def _call_llm(prompt: str) -> tuple:
+def _call_llm(prompt: str, max_tokens: Optional[int] = None) -> tuple:
     """Sends the assembled prompt to the current answer provider.
+
+    max_tokens: None keeps the rotation default (1024) — the legal and
+    single_doc path, unchanged. multi_doc passes
+    MULTI_DOC_MAX_OUTPUT_TOKENS (TDR Section 2k).
 
     Returns:
         (answer_text, provider_used, model_used) — so the caller can
@@ -303,6 +319,7 @@ def _call_llm(prompt: str) -> tuple:
     vendors instead — see generation/provider_rotation.py. Embeddings
     and image reading deliberately stay on the Gemini key pool.
     """
-    return call_with_provider_rotation(
-        [{"role": "user", "content": prompt}]
-    )
+    messages = [{"role": "user", "content": prompt}]
+    if max_tokens is None:
+        return call_with_provider_rotation(messages)
+    return call_with_provider_rotation(messages, max_tokens=max_tokens)
