@@ -156,9 +156,18 @@ _SOURCE_NUM_RE = re.compile(r"\bSource\s+(\d+)")
 # ADDED (TDR Section 2k, authorised Stage 6 exception, multi_doc only).
 # A multi_doc answer covers several documents, and the 2026-11-01
 # re-check's Q21 answer was cut off mid-answer at the rotation default
-# of 1024 output tokens. legal and single_doc keep that default: their
-# call to _call_llm is unchanged.
-MULTI_DOC_MAX_OUTPUT_TOKENS = 2048
+# of 1024 output tokens. RAISED from 2048 to 4000 after the 2026-11-02
+# full run stored Q21 cut off again: reasoning tokens count inside the
+# cap, and most likely used most of it. 4000 is the documented output
+# maximum for Cohere's command-r-08-2024; a higher value risks Cohere
+# rejecting multi_doc requests. legal and single_doc keep the 1024
+# default: their call to _call_llm is unchanged.
+MULTI_DOC_MAX_OUTPUT_TOKENS = 4000
+
+# ADDED (TDR Section 2k follow-up): put ahead of any other warning when
+# the provider stopped at the output limit (finish_reason "length" or
+# "max_tokens"), so a cut-off answer is never returned as if complete.
+TRUNCATION_WARNING = "This answer was cut off at the output limit and may be incomplete."
 
 
 class SourceInfo(TypedDict):
@@ -222,17 +231,19 @@ def generate_answer(
 
     prompt = build_prompt(question, chunks, mode, answer_style)
     if mode == "multi_doc":
-        raw_answer, provider_used, model_used = _call_llm(
+        raw_answer, provider_used, model_used, truncated = _call_llm(
             prompt, max_tokens=MULTI_DOC_MAX_OUTPUT_TOKENS
         )
     else:
-        raw_answer, provider_used, model_used = _call_llm(prompt)
+        raw_answer, provider_used, model_used, truncated = _call_llm(prompt)
 
     cited_indices, discarded_count = _extract_valid_citations(raw_answer, len(chunks))
     used_chunks = [chunks[i] for i in cited_indices]
 
     sources = [_chunk_to_source_info(chunk) for chunk in used_chunks]
     warning = build_warning(raw_answer, used_chunks, discarded_count)
+    if truncated:
+        warning = f"{TRUNCATION_WARNING} {warning}" if warning else TRUNCATION_WARNING
 
     return {
         "answer": raw_answer,
@@ -304,12 +315,13 @@ def _call_llm(prompt: str, max_tokens: Optional[int] = None) -> tuple:
     MULTI_DOC_MAX_OUTPUT_TOKENS (TDR Section 2k).
 
     Returns:
-        (answer_text, provider_used, model_used) — so the caller can
-        record BOTH which vendor served the request and which model
-        that vendor actually used. A rotation chain is only auditable
-        if the result says what produced it, and for the
+        (answer_text, provider_used, model_used, truncated) — so the
+        caller can record BOTH which vendor served the request and which
+        model that vendor actually used. A rotation chain is only
+        auditable if the result says what produced it, and for the
         openrouter/free alias the served model is not knowable from
-        the configured id alone.
+        the configured id alone. truncated is True when the provider
+        stopped at max_tokens (TDR Section 2k follow-up).
 
     CHANGED (TDR Section 2i): previously this tried every model in
     GENERATION_MODELS against each Gemini key in turn. That chain

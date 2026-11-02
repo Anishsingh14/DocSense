@@ -154,7 +154,11 @@ def grade_answer(
         generated_answer=generated_answer,
         grading_rules=_build_grading_rules(mode, requested_documents, source_documents),
     )
-    raw_response, provider_used, model_used = _call_llm(prompt, avoid_provider=writer_provider)
+    # The 4th value (truncated) is ignored here: the rotation layer already
+    # logs a cut-off grading reply, and the verdict parser is unchanged.
+    raw_response, provider_used, model_used, _truncated = _call_llm(
+        prompt, avoid_provider=writer_provider
+    )
     verdict, reason = _parse_grading_response(raw_response)
 
     return {
@@ -213,7 +217,7 @@ def _call_llm(prompt: str, avoid_provider: Optional[str] = None) -> tuple:
     from `avoid_provider` (the writer) unless nothing else can serve.
 
     Returns:
-        (raw_response_text, provider_used, model_used). Same
+        (raw_response_text, provider_used, model_used, truncated). Same
         call-construction pattern as generation/
         answer_with_citations.py's _call_llm — see module docstring.
     """

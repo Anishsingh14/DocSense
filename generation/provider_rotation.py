@@ -248,14 +248,47 @@ def _extract_model_used(body: dict, provider: ProviderConfig) -> str:
     return provider.model
 
 
+# finish_reason values meaning the provider stopped at max_tokens, so the
+# text is cut off. "length" is the OpenAI-compatible value; "max_tokens"
+# covers providers that report it under that name. ADDED (TDR Section 2k
+# follow-up): the 2026-11-02 full run stored Q21 cut off mid-sentence and
+# nothing flagged it, because finish_reason was never read.
+_TRUNCATED_FINISH_REASONS = ("length", "max_tokens")
+
+
+def _usage_note(body: dict) -> str:
+    """Token counts for the success log line, e.g. "1100 output tokens,
+    764 reasoning", taken from the response's usage block.
+
+    Returns "" when the provider sent no usage block. Never raises: a
+    missing or differently shaped usage block is not a failure.
+    """
+    usage = body.get("usage")
+    if not isinstance(usage, dict):
+        return ""
+    parts = []
+    output = usage.get("completion_tokens")
+    if isinstance(output, int):
+        parts.append(f"{output} output tokens")
+    details = usage.get("completion_tokens_details")
+    reasoning = details.get("reasoning_tokens") if isinstance(details, dict) else None
+    if isinstance(reasoning, int):
+        parts.append(f"{reasoning} reasoning")
+    return ", ".join(parts)
+
+
 def _post_chat(
     provider: ProviderConfig,
     key: str,
     messages: List[dict],
     max_tokens: int,
     temperature: float,
-) -> Tuple[str, str]:
-    """One HTTP attempt. Returns (text, model_used) or raises ProviderCallError."""
+) -> Tuple[str, str, bool, str]:
+    """One HTTP attempt. Returns (text, model_used, truncated, usage_note)
+    or raises ProviderCallError. truncated is True when the provider
+    stopped at max_tokens (see _TRUNCATED_FINISH_REASONS); usage_note is
+    the token counts for the log line, or "" if the provider sent none.
+    """
     label = _label(provider)
     payload = {
         "model": provider.model,
@@ -290,7 +323,8 @@ def _post_chat(
 
     try:
         body = response.json()
-        message = body["choices"][0]["message"]
+        choice = body["choices"][0]
+        message = choice["message"]
         text = message.get("content") or ""
     except Exception as exc:
         raise ProviderCallError(
@@ -318,7 +352,8 @@ def _post_chat(
             "HTTP 200 but response content was empty (provider malfunction)",
         )
 
-    return text, _extract_model_used(body, provider)
+    truncated = choice.get("finish_reason") in _TRUNCATED_FINISH_REASONS
+    return text, _extract_model_used(body, provider), truncated, _usage_note(body)
 
 
 def _eligible(now: float) -> List[int]:
@@ -342,7 +377,7 @@ def call_with_provider_rotation(
     max_tokens: int = 1024,
     temperature: float = 0.0,
     avoid_providers: Optional[List[str]] = None,
-) -> Tuple[str, str, str]:
+) -> Tuple[str, str, str, bool]:
     """Sends one chat completion, rotating providers on failure.
 
     Behaviour (per explicit user specification):
@@ -358,9 +393,12 @@ def call_with_provider_rotation(
         this question only.
 
     Returns:
-        (text, provider_env_var, model_used) — model_used is the model
-        that actually served the response, which for openrouter/free
-        differs from the configured alias.
+        (text, provider_env_var, model_used, truncated) — model_used is
+        the model that actually served the response, which for
+        openrouter/free differs from the configured alias. truncated is
+        True when the provider stopped at max_tokens, so the text is cut
+        off (ADDED, TDR Section 2k follow-up); the success log line says
+        so too.
 
     Raises:
         AllProvidersExhaustedError: every eligible provider failed.
@@ -410,7 +448,7 @@ def call_with_provider_rotation(
         print(f"  [{_ts()}] [provider] trying {label}...", flush=True)
         start = time.monotonic()
         try:
-            text, model_used = _post_chat(
+            text, model_used, truncated, usage_note = _post_chat(
                 provider, _key_for(provider), messages, max_tokens, temperature
             )
         except ProviderCallError as exc:
@@ -483,12 +521,21 @@ def call_with_provider_rotation(
             if model_used != provider.model
             else ""
         )
+        # ADDED (TDR Section 2k follow-up): token counts when the provider
+        # reports them, and an explicit note when the text was cut off at
+        # max_tokens, so a truncated answer is visible in every run log.
+        usage_part = f"; {usage_note}" if usage_note else ""
+        cut_part = (
+            f"; cut off at the output limit (max_tokens={max_tokens})"
+            if truncated
+            else ""
+        )
         print(
             f"  [{_ts()}] [provider] {label} SUCCEEDED in {elapsed:.1f}s"
-            f"{served_note}",
+            f"{served_note}{usage_part}{cut_part}",
             flush=True,
         )
-        return text, provider.env_var, model_used
+        return text, provider.env_var, model_used, truncated
 
     # Nothing left to try.
     enabled_count = sum(1 for p in PROVIDERS if p.enabled)
