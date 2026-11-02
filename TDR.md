@@ -4,7 +4,7 @@
 **Version:** 1.0 (V1 Scope)
 **Companion document to:** PRD.md
 **Status:** Stages 1–6 built and verified; Stage 7 (evaluation framework) built; Stage 8 (API layer) complete; Stage 9 not started
-**Last Updated:** 2026-11-01 (Section 2k extended: the authorised multi_doc Stage 6 exception and its live check, the judge-only re-grade and its caveat, and NVIDIA's intermittent timeouts. Earlier the same day: Section 2k added — Stage 7 follow-up: per-document retrieval guarantee and opening chunk for legal/multi_doc, three judge rules, grader independence, and the measured before/after results; Section 2f's status now points to 2k. Previously 2026-10-28: Section 2j added — Stage 8 FastAPI layer: endpoint shapes, single-process/narrow-lock concurrency model, asynchronous ingestion, error mapping, and the two approved exceptions to "no changes in earlier stages". Previously 2026-10-27: documentation synced to the code as built: Stage 7 module list corrected to the three real dataset files and the actual verdict scale, Evaluation tech-stack row corrected — RAGAS is not called, Stage 8/9 marked not started. Section 2i, added 2026-10-26, documents the move of answer generation and grading from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
+**Last Updated:** 2026-11-03 (Section 2k: the Q21 truncation fix and its live check, the 2026-11-02 full run, a correction to the claim that the 2,048 cap fixed Q21, and new known limitations. Previously 2026-11-01: Section 2k extended: the authorised multi_doc Stage 6 exception and its live check, the judge-only re-grade and its caveat, and NVIDIA's intermittent timeouts. Earlier the same day: Section 2k added — Stage 7 follow-up: per-document retrieval guarantee and opening chunk for legal/multi_doc, three judge rules, grader independence, and the measured before/after results; Section 2f's status now points to 2k. Previously 2026-10-28: Section 2j added — Stage 8 FastAPI layer: endpoint shapes, single-process/narrow-lock concurrency model, asynchronous ingestion, error mapping, and the two approved exceptions to "no changes in earlier stages". Previously 2026-10-27: documentation synced to the code as built: Stage 7 module list corrected to the three real dataset files and the actual verdict scale, Evaluation tech-stack row corrected — RAGAS is not called, Stage 8/9 marked not started. Section 2i, added 2026-10-26, documents the move of answer generation and grading from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
 
 ---
 
@@ -239,7 +239,7 @@ This meant rotation had nowhere useful to go on a 429 — the newer keys couldn'
 ## 2f. Known Limitation: multi_doc Mode Can Exclude a Requested Document Entirely (Addressed in Section 2k)
 
 **Flagged date:** 2026-09-24 (Stage 6 manual test run)
-**Status:** Addressed in Section 2k (2026-11-01). With the per-document retrieval guarantee, all 12 coverage queries had full coverage: **12 of 12**, against 5 of 12 before. That is a retrieval-only measurement on those 12 queries; the full suite has not been re-run with the change. The section below is kept as the original record.
+**Status:** Addressed in Section 2k (2026-11-01). With the per-document retrieval guarantee, all 12 coverage queries had full coverage: **12 of 12**, against 5 of 12 before. The full suite was re-run once, on 2026-11-02 at commit 1e463c7, and also had full coverage on all 12 (Section 2k). The section below is kept as the original record.
 
 ### The problem
 
@@ -550,12 +550,12 @@ What this re-check can and cannot attribute:
 - **Q6 and Q14:** the context was the same as before (the opening chunk was already in the old top-5), so the change came from the writer.
 - **Judge rules (Q8, Q10, Q15, Q16):** Q8 and Q16 did not change, and their new answers are weaker. Q8 quotes the "executed this Agreement as of the date below" line and stops before the signature dates; Q16 says no expiration date is given. In both cases the missing text was in the retrieved context (checked against the stored chunks: Gridiron `p5_c0` holds "Date: 1/27/2020", TransMontaigne `p4_c1` holds "This Agreement shall remain in effect until terminated by the Parties"). Q10 became correct, but its new answer does not hedge, so rule 2 was not exercised. Q15 became correct with the same quoted sentence as before, and the grader's reason cites the blank placeholder. That is consistent with rule 1, but the writer and grader also changed. The judge-only re-grade below grades the old answers again with the current judge.
 - **Substring-check caveat.** The retrieval-only run's "expected text found in the retrieved context" check (11/11 short expected answers) is weak evidence for the document-name questions. For Q1 and Q6 the title also appears in repeated page headers (`…SUPPLY AGREEMENT (cont'd)`), so the check passes without the opening chunk. Only Q12's title depends on the opening chunk.
-- **Q21's cut-off answer:** it stopped mid-table. The live check in the Stage 6 exception at the end of this section points to the 1024-token output cap, and that exception addresses it.
+- **Q21's cut-off answer:** it stopped mid-table at the 1024-token output cap. The Stage 6 exception below raised the multi_doc cap to 2,048. **Correction:** this section earlier said that addressed the cut-off. It did not: the 2026-11-02 full run stored Q21 cut off again (see Truncation fix, below).
 - **Not re-run:** the 12 questions that were already correct, so any regressions among them are unmeasured.
 
 **Judge-only re-grade (2026-11-01).** The 2026-10-31 answers for Q8, Q10, Q15 and Q16 were graded again with the current judge: 4 grading calls, with Groq grading Cohere's answers, so every grade was independent. All four moved from partially_correct to correct. This re-grade changed both the judge prompt (the three rules above) and the grader (Cohere grading its own answers before, Groq now), so the two effects cannot be separated. The four old answers are the cases the rules target: Q15 reproduced the blank date, and Q8, Q10 and Q16 hedged before quoting the expected text verbatim. For Q8 and Q16, the old Cohere answers now grade correct while the re-check's new Groq answers did not, so on those two questions the change of writer made the answers worse.
 
-**Not claimed.** No answer-quality improvement is claimed beyond what the 11-question re-check and the judge-only re-grade above show. The full 23-question suite has not been re-run with the new retrieval and judge rules.
+**Not claimed.** No answer-quality improvement is claimed beyond what the 11-question re-check and the judge-only re-grade above show. The full 23-question suite was re-run once, on 2026-11-02 at commit 1e463c7 (see Truncation fix, below), and has not been re-run since that fix.
 
 **Mocked verification:** 38/38 checks on the new retrieval, judge-rule and avoid-provider logic (a throwaway script, since deleted), and the Stage 8 suite `api/test_stage8_api.py` still passes 66/66.
 
@@ -569,7 +569,7 @@ What this re-check can and cannot attribute:
 
 - **Source headers: unchanged.** They already name the document, as its file name: `[Source N | <file name> | Page X]`.
 - **Instruction, appended** to the multi_doc instruction with the original sentence kept: "Several sources can come from the same document, and each Source label names its document. Refer to each document by its name, and never describe or count sources as documents. Give short bullets per document, grouped under that document's name. Do not use tables."
-- **Output cap:** `MULTI_DOC_MAX_OUTPUT_TOKENS = 2048`, for multi_doc generation only. legal and single_doc keep the rotation default of 1,024, and grading is unchanged.
+- **Output cap:** `MULTI_DOC_MAX_OUTPUT_TOKENS = 2048`, for multi_doc generation only (raised to 4,000 on 2026-11-02; see Truncation fix, below). legal and single_doc keep the rotation default of 1,024, and grading is unchanged.
 - **Not touched:** the legal and single_doc prompts (byte-identical to the previous commit), the "say so explicitly" absence wording (Section 2g), and the citation parser.
 
 **Provider acceptance of 2,048,** checked before the change:
@@ -583,16 +583,44 @@ What this re-check can and cannot attribute:
 | NVIDIA `minimaxai/minimax-m3.1-flash` | four probes got no response within 45–90 s, one of them at 1,024 | not confirmed |
 | SiliconFlow, OpenCode (both disabled) | SiliconFlow docs allow up to the context length; no official OpenCode limit found | never called |
 
-The cap stays at 2,048 by decision: four of the five enabled providers are confirmed, and NVIDIA failed by not responding, not by rejecting the value. If a provider does reject it, the existing rotation rule applies: a 400 that mentions `max_tokens` counts as "prompt too long" and skips that provider for that question only.
+At the time, the cap stayed at 2,048 by decision (superseded on 2026-11-02; see Truncation fix, below): four of the five enabled providers are confirmed, and NVIDIA failed by not responding, not by rejecting the value. If a provider does reject it, the existing rotation rule applies: a 400 that mentions `max_tokens` counts as "prompt too long" and skips that provider for that question only.
 
 **Verification.** Mocked: `api/test_stage8_api.py` 66/66 (it runs the real citation parser), plus 13 throwaway checks: the legal and single_doc prompts are byte-identical to the previous commit, only multi_doc sends 2,048, and the parser reads the new bullet format.
 
 Live, Q21 and Q23 through `run_question()`: 8 attempts against 6 planned and a cap of 14. The 2 extra attempts were NVIDIA grading timeouts that rotation absorbed. Groq wrote both answers and Cohere graded both.
 
-- **Q21:** bullets under each document's file name, no table, and "Both documents" in the comparison, with no wrong document count. It finished normally (`finish_reason: stop`) at 1,100 output tokens, 764 of them reasoning. Verdict correct, up from partially_correct in the re-check. Its comparison bullets shorten the names to "CUAD" and "SampleServices". That is unambiguous here, but "CUAD" is the dataset prefix shared by three of the sample contracts.
+- **Q21:** bullets under each document's file name, no table, and "Both documents" in the comparison, with no wrong document count. It finished normally (`finish_reason: stop`) at 1,100 output tokens, 764 of them reasoning. Verdict correct, up from partially_correct in the re-check. (The 2026-11-02 full run then stored Q21 cut off at this same 2,048 cap; see Truncation fix, below.) Its comparison bullets shorten the names to "CUAD" and "SampleServices". That is unambiguous here, but "CUAD" is the dataset prefix shared by three of the sample contracts.
 - **Q23:** names all four parties under the two documents' file names and finished normally at 697 output tokens, 395 of them reasoning. Verdict correct.
 
 **Known limitation: NVIDIA times out intermittently.** On 2026-11-01 NVIDIA graded the re-check's questions in about 2.5 s each and then returned a 429. That evening it gave no response to six requests in a row: four probes (45–90 s each, one of them at the 1,024 cap) and both grading calls in the live check (45.4 s each). Rotation absorbed every timeout with a 60-second cooldown, and Cohere graded instead, but each timeout added about 45 s to its question.
+
+### Truncation fix (2026-11-02)
+
+**Why.** The full run of 2026-11-02 (below) stored Q21 cut off. Its answer ends "continues for an", partway through clause 4.1, and never reaches the 30-day clause. No `finish_reason` or token counts were logged, because the pipeline never read them. This corrects the earlier claim in this section that the 2,048 cap fixed Q21's cut-off.
+
+**What changed** (commit `2c826ba`):
+- The multi_doc output cap rose from 2,048 to 4,000 (`MULTI_DOC_MAX_OUTPUT_TOKENS`). 4,000 is Cohere's documented maximum, the lowest of the enabled providers that document one. legal and single_doc stay at 1,024.
+- `_post_chat` now reads `finish_reason` and `usage`. A `finish_reason` of "length" or "max_tokens" sets a truncation flag, which `call_with_provider_rotation` returns as a fourth value.
+- A truncated answer's warning starts with "This answer was cut off at the output limit and may be incomplete.", ahead of any other warning.
+- The success log line now shows output and reasoning token counts when the provider reports them, and "cut off at the output limit" when the flag is set.
+
+**Verification.** Offline: 36/36 checks with fake responses (`finish_reason` "length", "stop" and "max_tokens", and a body with no usage block), and the API suite `api/test_stage8_api.py` at 66/66. The truncation warning has been verified only with fake responses; no live answer has triggered it.
+
+**Live check, Q21 then Q7 (8 of 10 attempts).**
+- **Q21:** Groq at the 4,000 cap spent 3,998 of 4,000 output tokens on reasoning and returned an empty answer (`finish_reason` "length"). The existing empty-answer rule counted that as a provider failure, so the log calls it a provider malfunction rather than a cut-off, and rotation moved on. NVIDIA timed out at 45.7 s. Cohere wrote the answer: `finish_reason` "stop", 398 output tokens. **The 4,000 cap does not guarantee that Groq finishes this question.**
+- **Q21's verdict is still partially_correct.** The answer quotes clauses 4.1 to 4.3, including the 30-day clause, but its last section wrongly says no termination clause was found for two documents (a false abstention).
+- **Q7 was written by Cohere, not Groq.** Rotation stays on the provider that last succeeded, which after Q21 was Cohere. Groq was not cooling down: its 60-second cooldown had ended, and it graded both questions. So whether Groq's legal answers get cut off at 1,024 is still unresolved.
+
+**Full run of 2026-11-02** (results file `eval_results_20261101T205702Z.json`; the file name uses UTC). It ran on commit 1e463c7, before this fix, and has not been re-run in full since. NVIDIA was skipped in memory for that run. Groq wrote all 23 answers and Cohere graded all 23, in 81 calls (the floor) with no failures.
+- Retrieval 23/23 (21/23 on 2026-10-31). Verdicts 16 correct, 7 partially_correct, 0 incorrect (12, 7 and 4 before). Coverage 12/12 queries and 32/32 documents (5/12 before).
+- Four questions that were correct on 2026-10-31 are now partially_correct: Q5, Q7 and Q11 (see the grader limitation below) and Q18, whose answer left out the termination-for-cause clause.
+
+**Known limitations**
+- **Groq's reasoning length varies.** On Q21 it used 764 reasoning tokens (2026-11-01 live check, cap 2,048), about 1,900 (inferred from where the full-run answer stops, cap 2,048) and 3,998 of 4,000 (2026-11-02 live check). A lower reasoning effort for Groq only (option A2 in the 2026-11-02 review) would target this; it is deferred and untested.
+- **The legal cap stays at 1,024**, as does single_doc's. Reasoning counts inside it, so a long answer could still be cut off. The warning would flag it, but that has not been seen live.
+- **NVIDIA timeouts** (see above) add about 45 s each time NVIDIA is tried. It timed out again at 45.7 s on 2026-11-02.
+- **The grader is strict on some answers.** In the full run, Cohere marked Q5 and Q7 down for extra, accurate detail, and Q11 for omitting a "written" requirement that the quoted clause does contain.
+- **The writer misspelled a file name in Q22.** Its heading ends `SERVICES_AGEM.pdf`; the file is `CUAD_TRANSMONTAIGNEPARTNERSLLC_03_13_2020-EX-10_9-SERVICES_AGREEM.pdf`.
 
 ---
 
