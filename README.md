@@ -352,6 +352,15 @@ Output is a full per-question transcript — expected versus generated answer, r
 
 A separate set of **12 multi-document coverage queries** checks how often a requested document is left out of the retrieved context entirely, which is the known limitation recorded in TDR Section 2f.
 
+**Final Stage 7 run** (2026-11-03, HEAD 3b9c014, results file `eval_results_20261103T180353Z.json`). This is the headline result. It replaces the 2026-11-02 run, which ran on commit 1e463c7 before the truncation fix.
+
+- Retrieval 23/23. Coverage 12/12 queries and 32/32 documents.
+- Judge verdicts: 18 correct, 4 partially_correct (Q5, Q8, Q18, Q21), 1 incorrect (Q1), 0 not_measured.
+- Manual review (by hand, not by the judge): 20 correct, 2 partially_correct (Q8, Q18), 1 incorrect (Q1). The judge marked Q5 down for extra detail and Q21 for wording, which its own rules allow.
+- 81 calls, 0 failures, 8 min 8 s. Groq wrote all 23 answers and Cohere graded all 23. NVIDIA was skipped in memory only, with no repo change.
+
+TDR Section 2k has the details, including an aborted first attempt and the first live truncation warning (Q7).
+
 ## Roadmap
 
 | Version | Scope |
@@ -376,17 +385,20 @@ Free-tier APIs fail in ways that are easy to mistake for bugs, so a few things a
 
 Documented honestly rather than hidden. Full reasoning for each is in [`TDR.md`](./TDR.md):
 
-- **Multi-document coverage is guaranteed at retrieval, within a cap.** Retrieval used to return one global top-k across all requested documents, so a requested document could be left out entirely. It now reserves chunks for every requested document, within an 8-chunk context cap: at least two each for up to 4 documents, at least one each for up to 8. On the 12 coverage queries this gave full coverage on 12 of 12, against 5 of 12 before. The full evaluation run of 2026-11-02 (commit 1e463c7) also had full coverage on all 12. *(TDR 2f, 2k)*
-- **Answer writers sometimes quote selectively or answer "no such clause" wrongly.** In the 11-question re-check, one answer quoted the "executed this Agreement as of the date below" line and stopped before the signature dates it introduces (Q8). Another said the contract gives no expiration date, although the retrieved context contained "This Agreement shall remain in effect until terminated by the Parties" (Q16). In both cases the text had been retrieved, so these are generation behaviours, not retrieval misses. *(TDR 2k)*
+- **Multi-document coverage is guaranteed at retrieval, within a cap.** Retrieval used to return one global top-k across all requested documents, so a requested document could be left out entirely. It now reserves chunks for every requested document, within an 8-chunk context cap: at least two each for up to 4 documents, at least one each for up to 8. On the 12 coverage queries this gave full coverage on 12 of 12, against 5 of 12 before. The final Stage 7 run (2026-11-03, HEAD 3b9c014) also had full coverage on all 12, with 32 of 32 documents; it supersedes the 2026-11-02 run at commit 1e463c7. *(TDR 2f, 2k)*
+- **Answer writers sometimes quote selectively or answer "no such clause" wrongly.** In the 11-question re-check, one answer quoted the "executed this Agreement as of the date below" line and stopped before the signature dates it introduces (Q8). Another said the contract gives no expiration date, although the retrieved context contained "This Agreement shall remain in effect until terminated by the Parties" (Q16). In both cases the text had been retrieved, so these are generation behaviours, not retrieval misses. In the final run, Groq said a contract has no document name although retrieval was correct (Q1), a false "not found"; the app's own "No sources could be verified" warning fired. *(TDR 2k)*
 - **"Not found" behaviour is not covered by a correctness eval entry yet** — no labeled question currently tests whether the system correctly reports that information is absent. *(TDR 2g)*
 - **Embeddings and image analysis are still single-vendor.** They remain on the Gemini key pool, so a Gemini-wide outage still blocks retrieval even when several answer providers are healthy. This is the largest remaining shared-fate risk. *(TDR 2i)*
 - **Citation formats differ by model.** The parser accepts any provider that emits `(Source N)`, but adherence is per-model behaviour, not a guarantee — which is why `provider_used` is recorded on every result. Verdicts are not strictly comparable across providers. *(TDR 2i)*
 - **Documents pass through several third-party providers.** Retrieved text is sent to whichever vendor is active. Fine for the public sample documents used here; review before using it on anything confidential. *(TDR 2i)*
 - **NVIDIA's free endpoint times out intermittently.** On 2026-11-01 it graded answers in about 2.5 s in the afternoon, then gave no response to six requests in a row that evening. Rotation absorbs this with a 60-second cooldown while the next provider answers, but each timeout adds about 45 s to that question. *(TDR 2k)*
-- **Groq's reasoning length varies, and can use up the whole output limit.** On the same multi-document question it spent 764, about 1,900 (inferred) and then 3,998 output tokens on reasoning. At 3,998 of 4,000 it returned an empty answer and another provider wrote it instead. A lower reasoning effort for Groq is the candidate fix; it is deferred. *(TDR 2k)*
-- **Legal and single-document answers keep a 1,024-token output limit.** Reasoning counts inside it, so a long answer could be cut off. A cut-off answer now carries a warning, but that warning has only been tested with fake responses. *(TDR 2k)*
-- **The grader can be strict.** In the 2026-11-02 run it marked Q5 and Q7 down for extra, accurate detail, and Q11 for omitting a requirement that the quoted clause does contain. *(TDR 2k)*
-- **Answer writers can misspell file names.** In the same run, one answer's heading spelled a contract file as `..._SERVICES_AGEM.pdf` instead of `..._SERVICES_AGREEM.pdf` (Q22). *(TDR 2k)*
+- **Groq's reasoning length varies, and can use up the whole output limit.** On the same multi-document question it spent 764, about 1,900 (inferred) and then 3,998 output tokens on reasoning. At 3,998 of 4,000 it returned an empty answer and another provider wrote it instead. In the final run it finished that question normally at 1,097 output tokens. A lower reasoning effort for Groq is the candidate fix; it is deferred. *(TDR 2k)*
+- **Legal and single-document answers keep a 1,024-token output limit, and Groq can truncate legal answers.** Reasoning counts inside the limit. In the final run, Groq's Q7 answer used all 1,024 output tokens, 797 of them reasoning, and stops mid-sentence at "…or if". The app showed the warning "This answer was cut off at the output limit and may be incomplete.", the first time it fired live. *(TDR 2k)*
+- **The grader does not see truncation.** It still marked the cut-off Q7 answer correct, because the parties quote is complete. *(TDR 2k)*
+- **The grader can be strict on extra detail and wording.** In the final run it marked Q5 down for extra detail and Q21 for wording, both of which its own rules allow. In the 2026-11-02 run it marked Q5 and Q7 down for extra, accurate detail, and Q11 for omitting a requirement that the quoted clause does contain. *(TDR 2k)*
+- **Answer writers can misspell file names.** In both the 2026-11-02 run and the final run, one answer's heading spelled a contract file as `..._SERVICES_AGEM.pdf` instead of `..._SERVICES_AGREEM.pdf` (Q22). *(TDR 2k)*
+- **The low-confidence warning is noisy.** It fired on 11 of the 23 answers in the final run. *(TDR 2k)*
+- **An empty OpenRouter reply has no logged `finish_reason`.** In the final run's first attempt, OpenRouter returned HTTP 200 with empty content while grading. That path does not log `finish_reason`, so the cause is unproven. *(TDR 2k)*
 - **Free-tier terms and limits apply.** Some providers' free tiers carry usage caps and non-commercial restrictions, and running an evaluation suite repeatedly can exhaust them. Several providers' current quotas and context windows could **not** be verified from official documentation and are deliberately not quoted here. *(TDR 2i)*
 - **Multi-key rotation is a development-volume workaround**, not a production rate-limiting strategy. *(TDR 2d)*
 

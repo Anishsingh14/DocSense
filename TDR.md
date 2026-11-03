@@ -4,7 +4,7 @@
 **Version:** 1.0 (V1 Scope)
 **Companion document to:** PRD.md
 **Status:** Stages 1–6 built and verified; Stage 7 (evaluation framework) built; Stage 8 (API layer) complete; Stage 9 not started
-**Last Updated:** 2026-11-03 (Section 2k: the Q21 truncation fix and its live check, the 2026-11-02 full run, a correction to the claim that the 2,048 cap fixed Q21, and new known limitations. Previously 2026-11-01: Section 2k extended: the authorised multi_doc Stage 6 exception and its live check, the judge-only re-grade and its caveat, and NVIDIA's intermittent timeouts. Earlier the same day: Section 2k added — Stage 7 follow-up: per-document retrieval guarantee and opening chunk for legal/multi_doc, three judge rules, grader independence, and the measured before/after results; Section 2f's status now points to 2k. Previously 2026-10-28: Section 2j added — Stage 8 FastAPI layer: endpoint shapes, single-process/narrow-lock concurrency model, asynchronous ingestion, error mapping, and the two approved exceptions to "no changes in earlier stages". Previously 2026-10-27: documentation synced to the code as built: Stage 7 module list corrected to the three real dataset files and the actual verdict scale, Evaluation tech-stack row corrected — RAGAS is not called, Stage 8/9 marked not started. Section 2i, added 2026-10-26, documents the move of answer generation and grading from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
+**Last Updated:** 2026-11-03 (Section 2k: the final Stage 7 run on HEAD 3b9c014, which replaces the 2026-11-02 run as the headline result, with its aborted first attempt, the first live truncation warning (Q7) and updated known limitations; Section 2f's status now cites the final run. Earlier the same day: Section 2k: the Q21 truncation fix and its live check, the 2026-11-02 full run, a correction to the claim that the 2,048 cap fixed Q21, and new known limitations. Previously 2026-11-01: Section 2k extended: the authorised multi_doc Stage 6 exception and its live check, the judge-only re-grade and its caveat, and NVIDIA's intermittent timeouts. Earlier the same day: Section 2k added — Stage 7 follow-up: per-document retrieval guarantee and opening chunk for legal/multi_doc, three judge rules, grader independence, and the measured before/after results; Section 2f's status now points to 2k. Previously 2026-10-28: Section 2j added — Stage 8 FastAPI layer: endpoint shapes, single-process/narrow-lock concurrency model, asynchronous ingestion, error mapping, and the two approved exceptions to "no changes in earlier stages". Previously 2026-10-27: documentation synced to the code as built: Stage 7 module list corrected to the three real dataset files and the actual verdict scale, Evaluation tech-stack row corrected — RAGAS is not called, Stage 8/9 marked not started. Section 2i, added 2026-10-26, documents the move of answer generation and grading from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
 
 ---
 
@@ -239,7 +239,7 @@ This meant rotation had nowhere useful to go on a 429 — the newer keys couldn'
 ## 2f. Known Limitation: multi_doc Mode Can Exclude a Requested Document Entirely (Addressed in Section 2k)
 
 **Flagged date:** 2026-09-24 (Stage 6 manual test run)
-**Status:** Addressed in Section 2k (2026-11-01). With the per-document retrieval guarantee, all 12 coverage queries had full coverage: **12 of 12**, against 5 of 12 before. The full suite was re-run once, on 2026-11-02 at commit 1e463c7, and also had full coverage on all 12 (Section 2k). The section below is kept as the original record.
+**Status:** Addressed in Section 2k (2026-11-01). With the per-document retrieval guarantee, all 12 coverage queries had full coverage: **12 of 12**, against 5 of 12 before. The final Stage 7 run (2026-11-03, HEAD 3b9c014) also had full coverage on all 12, with 32 of 32 documents (Section 2k). It supersedes the 2026-11-02 run at commit 1e463c7, which had the same coverage. The section below is kept as the original record.
 
 ### The problem
 
@@ -555,7 +555,7 @@ What this re-check can and cannot attribute:
 
 **Judge-only re-grade (2026-11-01).** The 2026-10-31 answers for Q8, Q10, Q15 and Q16 were graded again with the current judge: 4 grading calls, with Groq grading Cohere's answers, so every grade was independent. All four moved from partially_correct to correct. This re-grade changed both the judge prompt (the three rules above) and the grader (Cohere grading its own answers before, Groq now), so the two effects cannot be separated. The four old answers are the cases the rules target: Q15 reproduced the blank date, and Q8, Q10 and Q16 hedged before quoting the expected text verbatim. For Q8 and Q16, the old Cohere answers now grade correct while the re-check's new Groq answers did not, so on those two questions the change of writer made the answers worse.
 
-**Not claimed.** No answer-quality improvement is claimed beyond what the 11-question re-check and the judge-only re-grade above show. The full 23-question suite was re-run once, on 2026-11-02 at commit 1e463c7 (see Truncation fix, below), and has not been re-run since that fix.
+**Not claimed.** No answer-quality improvement is claimed beyond what the 11-question re-check, the judge-only re-grade and the full runs below show. The final Stage 7 run (2026-11-03, HEAD 3b9c014; see Final Stage 7 run, below) supersedes the 2026-11-02 full run at commit 1e463c7, which ran before the truncation fix.
 
 **Mocked verification:** 38/38 checks on the new retrieval, judge-rule and avoid-provider logic (a throwaway script, since deleted), and the Stage 8 suite `api/test_stage8_api.py` still passes 66/66.
 
@@ -604,23 +604,46 @@ Live, Q21 and Q23 through `run_question()`: 8 attempts against 6 planned and a c
 - A truncated answer's warning starts with "This answer was cut off at the output limit and may be incomplete.", ahead of any other warning.
 - The success log line now shows output and reasoning token counts when the provider reports them, and "cut off at the output limit" when the flag is set.
 
-**Verification.** Offline: 36/36 checks with fake responses (`finish_reason` "length", "stop" and "max_tokens", and a body with no usage block), and the API suite `api/test_stage8_api.py` at 66/66. The truncation warning has been verified only with fake responses; no live answer has triggered it.
+**Verification.** Offline: 36/36 checks with fake responses (`finish_reason` "length", "stop" and "max_tokens", and a body with no usage block), and the API suite `api/test_stage8_api.py` at 66/66. At the time, the truncation warning had been verified only with fake responses. It first fired live in the final run, on Q7 (see Final Stage 7 run, below).
 
 **Live check, Q21 then Q7 (8 of 10 attempts).**
 - **Q21:** Groq at the 4,000 cap spent 3,998 of 4,000 output tokens on reasoning and returned an empty answer (`finish_reason` "length"). The existing empty-answer rule counted that as a provider failure, so the log calls it a provider malfunction rather than a cut-off, and rotation moved on. NVIDIA timed out at 45.7 s. Cohere wrote the answer: `finish_reason` "stop", 398 output tokens. **The 4,000 cap does not guarantee that Groq finishes this question.**
 - **Q21's verdict is still partially_correct.** The answer quotes clauses 4.1 to 4.3, including the 30-day clause, but its last section wrongly says no termination clause was found for two documents (a false abstention).
-- **Q7 was written by Cohere, not Groq.** Rotation stays on the provider that last succeeded, which after Q21 was Cohere. Groq was not cooling down: its 60-second cooldown had ended, and it graded both questions. So whether Groq's legal answers get cut off at 1,024 is still unresolved.
+- **Q7 was written by Cohere, not Groq.** Rotation stays on the provider that last succeeded, which after Q21 was Cohere. Groq was not cooling down: its 60-second cooldown had ended, and it graded both questions. So whether Groq's legal answers get cut off at 1,024 was still unresolved after this check. The final run showed that they can: Groq's Q7 answer was cut off at 1,024 (see below).
 
-**Full run of 2026-11-02** (results file `eval_results_20261101T205702Z.json`; the file name uses UTC). It ran on commit 1e463c7, before this fix, and has not been re-run in full since. NVIDIA was skipped in memory for that run. Groq wrote all 23 answers and Cohere graded all 23, in 81 calls (the floor) with no failures.
+**Full run of 2026-11-02, now history** (results file `eval_results_20261101T205702Z.json`; the file name uses UTC). It ran on commit 1e463c7, before this fix. The final Stage 7 run (below) supersedes it as the headline result; its numbers are kept here as history. NVIDIA was skipped in memory for that run. Groq wrote all 23 answers and Cohere graded all 23, in 81 calls (the floor) with no failures.
 - Retrieval 23/23 (21/23 on 2026-10-31). Verdicts 16 correct, 7 partially_correct, 0 incorrect (12, 7 and 4 before). Coverage 12/12 queries and 32/32 documents (5/12 before).
-- Four questions that were correct on 2026-10-31 are now partially_correct: Q5, Q7 and Q11 (see the grader limitation below) and Q18, whose answer left out the termination-for-cause clause.
+- Four questions that were correct on 2026-10-31 were partially_correct in that run: Q5, Q7 and Q11 (see the grader limitation below) and Q18, whose answer left out the termination-for-cause clause.
 
-**Known limitations**
-- **Groq's reasoning length varies.** On Q21 it used 764 reasoning tokens (2026-11-01 live check, cap 2,048), about 1,900 (inferred from where the full-run answer stops, cap 2,048) and 3,998 of 4,000 (2026-11-02 live check). A lower reasoning effort for Groq only (option A2 in the 2026-11-02 review) would target this; it is deferred and untested.
-- **The legal cap stays at 1,024**, as does single_doc's. Reasoning counts inside it, so a long answer could still be cut off. The warning would flag it, but that has not been seen live.
+### Final Stage 7 run (2026-11-03)
+
+**The headline Stage 7 result** (results file `eval_results_20261103T180353Z.json`; the file name uses UTC). It ran on HEAD 3b9c014, which includes the truncation fix, and replaces the 2026-11-02 run above, which ran on commit 1e463c7 before the fix. NVIDIA was skipped in memory only, with no repo change. The run made 81 calls with 0 failures and took 8 min 8 s. Groq wrote all 23 answers and Cohere graded all 23.
+
+- Retrieval 23/23. Coverage 12/12 queries and 32/32 documents.
+- Judge verdicts: 18 correct, 4 partially_correct (Q5, Q8, Q18, Q21), 1 incorrect (Q1), 0 not_measured.
+- **Manual review** (by hand, not by the judge): 20 correct, 2 partially_correct (Q8, Q18), 1 incorrect (Q1). The judge marked Q5 down for extra detail and Q21 for wording, and its own rules allow both.
+
+**The truncation warning fired live for the first time, on Q7.** Groq's legal answer hit the 1,024 cap: 1,024 output tokens, 797 of them reasoning. The answer stops mid-sentence at "…or if", and the app showed the warning "This answer was cut off at the output limit and may be incomplete." The grader still marked Q7 correct, because the parties quote is complete and the grader does not see truncation. The legal cap stays at 1,024, and Groq can truncate legal answers.
+
+**Q21 finished normally** this time: 1,097 output tokens against the 4,000 cap.
+
+**Q1 is a real writer failure.** Groq said there is no document name, although retrieval was correct (a false "not found"). The 2026-11-02 run and attempt 1 of this run both quoted the title. The app's own "No sources could be verified" warning fired.
+
+**Attempt 1 was aborted at Q6** by a network drop: Gemini returned ConnectError on keys 1, 2 and 3. The wrapper's stop rule (3 failed attempts in a row) ended it safely after 5 questions and 20 attempts. On Q1 to Q5 it gave the same verdicts as the final run, except Q1, which was correct in attempt 1. In attempt 1, OpenRouter returned an empty grading reply for Q2 (HTTP 200, empty content). That path does not log `finish_reason`, so the cause is unproven; it is listed under Known limitations, below.
+
+**A restart, not a re-roll.** The final run is a restart on the same code after the network drop. It is not a re-roll for better numbers.
+
+### Known limitations
+
+- **Groq's reasoning length varies.** On Q21 it used 764 reasoning tokens (2026-11-01 live check, cap 2,048), about 1,900 (inferred from where the 2026-11-02 full-run answer stops, cap 2,048) and 3,998 of 4,000 (2026-11-02 live check). In the final run it finished Q21 normally at 1,097 output tokens, 748 of them reasoning. A lower reasoning effort for Groq only (option A2 in the 2026-11-02 review) would target this; it is deferred and untested.
+- **The legal cap stays at 1,024**, as does single_doc's. Reasoning counts inside it, and Groq can truncate legal answers: in the final run Q7 hit the cap (1,024 output tokens, 797 reasoning) and carried the truncation warning.
+- **The grader does not see truncation.** It marked the cut-off Q7 answer correct, because the parties quote is complete.
 - **NVIDIA timeouts** (see above) add about 45 s each time NVIDIA is tried. It timed out again at 45.7 s on 2026-11-02.
-- **The grader is strict on some answers.** In the full run, Cohere marked Q5 and Q7 down for extra, accurate detail, and Q11 for omitting a "written" requirement that the quoted clause does contain.
-- **The writer misspelled a file name in Q22.** Its heading ends `SERVICES_AGEM.pdf`; the file is `CUAD_TRANSMONTAIGNEPARTNERSLLC_03_13_2020-EX-10_9-SERVICES_AGREEM.pdf`.
+- **The grader is strict on extra detail and wording.** In the final run, Cohere marked Q5 down for extra detail and Q21 for wording, both of which its own rules allow. In the 2026-11-02 run it marked Q5 and Q7 down for extra, accurate detail, and Q11 for omitting a "written" requirement that the quoted clause does contain.
+- **The writer misspelled a file name in Q22**, in both the 2026-11-02 run and the final run. Its heading ends `SERVICES_AGEM.pdf`; the file is `CUAD_TRANSMONTAIGNEPARTNERSLLC_03_13_2020-EX-10_9-SERVICES_AGREEM.pdf`.
+- **Groq sometimes falsely says "not found".** In the final run it said Q1's contract has no document name, although retrieval was correct.
+- **The low-confidence warning is noisy.** It fired on 11 of the 23 final-run answers.
+- **An empty OpenRouter reply has no logged `finish_reason`.** In attempt 1 of the final run, OpenRouter returned HTTP 200 with empty content while grading Q2. That path does not log `finish_reason`, so the cause is unproven.
 
 ---
 
