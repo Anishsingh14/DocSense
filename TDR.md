@@ -3,8 +3,8 @@
 
 **Version:** 1.0 (V1 Scope)
 **Companion document to:** PRD.md
-**Status:** Stages 1–6 built and verified; Stage 7 (evaluation framework) built; Stage 8 (API layer) complete; Stage 9 not started
-**Last Updated:** 2026-11-03 (Section 2k: the final Stage 7 run on HEAD 3b9c014, which replaces the 2026-11-02 run as the headline result, with its aborted first attempt, the first live truncation warning (Q7) and updated known limitations; Section 2f's status now cites the final run. Earlier the same day: Section 2k: the Q21 truncation fix and its live check, the 2026-11-02 full run, a correction to the claim that the 2,048 cap fixed Q21, and new known limitations. Previously 2026-11-01: Section 2k extended: the authorised multi_doc Stage 6 exception and its live check, the judge-only re-grade and its caveat, and NVIDIA's intermittent timeouts. Earlier the same day: Section 2k added — Stage 7 follow-up: per-document retrieval guarantee and opening chunk for legal/multi_doc, three judge rules, grader independence, and the measured before/after results; Section 2f's status now points to 2k. Previously 2026-10-28: Section 2j added — Stage 8 FastAPI layer: endpoint shapes, single-process/narrow-lock concurrency model, asynchronous ingestion, error mapping, and the two approved exceptions to "no changes in earlier stages". Previously 2026-10-27: documentation synced to the code as built: Stage 7 module list corrected to the three real dataset files and the actual verdict scale, Evaluation tech-stack row corrected — RAGAS is not called, Stage 8/9 marked not started. Section 2i, added 2026-10-26, documents the move of answer generation and grading from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
+**Status:** Stages 1–6 built and verified; Stage 7 (evaluation framework) built; Stage 8 (API layer) complete; Stage 9 (web UI) built
+**Last Updated:** 2026-11-13 (Section 2l added: the Stage 9 web UI, built as a React + Vite site instead of Streamlit, how it connects to the API, its answer style toggle, verification and known limitations; the architecture diagram, tech stack, Section 4, repository structure and Definition of Done now name it. Previously 2026-11-03: Section 2k: the final Stage 7 run on HEAD 3b9c014, which replaces the 2026-11-02 run as the headline result, with its aborted first attempt, the first live truncation warning (Q7) and updated known limitations; Section 2f's status now cites the final run. Earlier the same day: Section 2k: the Q21 truncation fix and its live check, the 2026-11-02 full run, a correction to the claim that the 2,048 cap fixed Q21, and new known limitations. Previously 2026-11-01: Section 2k extended: the authorised multi_doc Stage 6 exception and its live check, the judge-only re-grade and its caveat, and NVIDIA's intermittent timeouts. Earlier the same day: Section 2k added — Stage 7 follow-up: per-document retrieval guarantee and opening chunk for legal/multi_doc, three judge rules, grader independence, and the measured before/after results; Section 2f's status now points to 2k. Previously 2026-10-28: Section 2j added — Stage 8 FastAPI layer: endpoint shapes, single-process/narrow-lock concurrency model, asynchronous ingestion, error mapping, and the two approved exceptions to "no changes in earlier stages". Previously 2026-10-27: documentation synced to the code as built: Stage 7 module list corrected to the three real dataset files and the actual verdict scale, Evaluation tech-stack row corrected — RAGAS is not called, Stage 8/9 marked not started. Section 2i, added 2026-10-26, documents the move of answer generation and grading from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
 
 ---
 
@@ -61,8 +61,8 @@
                      └──────────┬───────────┘
                                 │
                      ┌──────────▼───────────┐
-                     │ Stage 9: Frontend UI  │
-                     │ (built LAST)          │
+                     │ Stage 9: Web UI (2l)  │
+                     │ React + Vite          │
                      └───────────────────────┘
 
 Stage 7 (Evaluation Framework) runs parallel to Stages 5–6 during development.
@@ -85,9 +85,9 @@ Stage 7 (Evaluation Framework) runs parallel to Stages 5–6 during development.
 | Vision analysis | ~~Claude (Sonnet) vision API~~ → **Google Gemini API (free tier)** — see Section 2a | Free-tier alternative with no billing setup required; Claude remains the documented target for a future upgrade |
 | LLM (generation + grading) | ~~Claude (Sonnet/Haiku)~~ → ~~Google Gemini API only~~ → **rotation across 7 OpenAI-compatible providers** (Groq, NVIDIA, Cohere, OpenRouter, Gemini; SiliconFlow and OpenCode Console configured but disabled) — see Section 2i | Gemini's sibling Flash-tier models share capacity and failed together, leaving 5 of 11 Stage 7 questions unmeasured. Independent vendors remove that shared-fate risk. Embeddings and image reading deliberately stay on Gemini |
 | Orchestration | `LlamaIndex` (`CitationQueryEngine` as base, customized) | Built specifically for citation-grounded Q&A |
-| Backend API | `FastAPI` | Async support, clean OpenAPI docs, easy to wire to a future frontend |
+| Backend API | `FastAPI` | Async support, clean OpenAPI docs, easy to wire to the Stage 9 web UI |
 | Evaluation | ~~`RAGAS`~~ → **custom scoring script** (`evaluation/run_eval.py` + `evaluation/llm_judge.py`) | Two separately-reported metrics: a deterministic per-document retrieved-page check, and LLM-as-judge answer correctness on a fixed verdict scale. RAGAS is **not** called by the code — it stays in `requirements.txt` and remains a candidate for continuous faithfulness/relevancy scoring later. Deviation recorded in `run_eval.py`'s module docstring |
-| Frontend (Stage 9 only) | `Streamlit` | Fastest path to a usable demo UI |
+| Frontend (Stage 9 only) | ~~`Streamlit`~~ → **React 18 + Vite 5** (React Router, Tailwind CSS) in `DocSense-UI/` — see Section 2l | Built as a multi-page site (home, upload, chat, terms) that calls the Stage 8 API through a Vite proxy |
 
 ---
 
@@ -647,6 +647,47 @@ Live, Q21 and Q23 through `run_question()`: 8 attempts against 6 planned and a c
 
 ---
 
+## 2l. Stage 9 Web UI: React + Vite Instead of Streamlit (Documented Deviation)
+
+**Decision date:** 2026-11-13
+**Status:** Built, and tested by hand end to end against the Stage 8 API; minor issues remain and are deferred. Section 2 planned a Streamlit UI; the UI is a React site in `DocSense-UI/` instead. Stages 1–8 are unchanged.
+
+### What was built
+
+- React 18 and Vite 5, with React Router and Tailwind CSS. Pages: Home (`/`), Get Started (`/get-started`), Chat (`/chat`) and Terms (`/terms`).
+- **Get Started:** the user picks a mode and adds PDFs, up to 25 MB each to match the API's upload limit. The files are kept in the browser (IndexedDB) and handed to the Chat page.
+- **Chat:** questions and answers, clickable citations, the cited passages with page links into a PDF preview, the provider and model that answered, and the API's own warnings shown as a note under the answer. The header (back button, mode, answer style toggle, Preview) stays fixed at the top while the chat scrolls.
+
+### How it connects to the API
+
+- The browser calls `/api/...` on the UI's own origin. The Vite dev and preview servers forward these requests to `http://127.0.0.1:8000` with the `/api` prefix removed, so the API's CORS list did not change. `DOCSENSE_API_URL` changes the forwarding target. `VITE_API_BASE_URL` points the UI at another API address directly; that API must then allow the UI's origin.
+- When the Chat page opens, each file is checked against `GET /documents`. A stored document with the same file name is reused. Any other file is sent to `POST /documents`, and the page polls `GET /documents/jobs/{job_id}` every 2 s until ingestion finishes.
+- Questions go to `POST /query`. The UI's modes map to the API's names: General Q&A → `single_doc`, Multi-Doc → `multi_doc`, Legal Precision → `legal`.
+- The answer's `(Source N)` markers become clickable `[N]` buttons, for source numbers that were actually retrieved only. The Sources panel lists the cited passages: the numbers come from `core.citations` and the text from `evidence.sources`.
+- Each failure has its own message: API not reachable, providers busy (503), file too large (413), unreadable file, and a document that is no longer stored (404). After a 404 the next question uploads the file again.
+
+### Answer style toggle
+
+The Chat header has a **Summary | Exact quotes** toggle that sets `answer_style` (`summary` or `full`) for each question. General Q&A and Multi-Doc start on Summary. Legal Precision is locked to Exact quotes, because its prompt always asks for the exact clause text, so a summary request would contradict it. The choice is kept for the browser session, and each answer is tagged with the style it used.
+
+### Verification
+
+- **Offline:** 41/41 checks of the UI-to-API code against a fake API: citation conversion, response mapping, upload and polling, reuse of stored documents, every error path, and the answer styles. The script was a throwaway in the gitignored `logs/` folder and has been deleted.
+- **Build:** the production build (`vite build`) passes.
+- **Live, with no provider calls:** through the dev proxy, `/api/health` and `/api/documents` returned 200 from the API.
+- **By hand:** the user tested the whole flow through the UI.
+
+### Known limitations
+
+- **Answers are slow.** In a five-question live test through the UI, questions took 16–57 s. The reranker runs on the CPU: about 11–12 s per question, and about 48 s for the first question after the API starts, while it loads. Slow or failing providers added more: NVIDIA failed after 26.7 s on one question (HTTP 503), and Cohere took 43.8 s on another. Speed fixes are deferred.
+- **Documents are reused by file name.** The API names a document after its file, so a changed file with the same name is answered from the old stored copy until that copy is deleted or the file is renamed.
+- **No chat memory.** Each question is answered on its own; the API takes no history.
+- **Summary answers are unmeasured.** The Stage 7 runs used `full`.
+- **The `/api` forwarding exists only in `npm run dev` and `npm run preview`.** Hosting the built site needs `/api` routed to the API, or `VITE_API_BASE_URL` plus a CORS change.
+- **No login.** Like the API (Section 2j), the UI is for local use.
+
+---
+
 ## 3. Data Schema (Core Contract Across All Stages)
 
 Every chunk — whether derived from text or an image — must conform to this schema before being embedded and stored. This is the single most important contract in the system; all modules must read/write it consistently.
@@ -746,8 +787,10 @@ Updated to match the code as built. The original entry named a single
 
 **Still under consideration, not implemented and no design decided:** letting users supply their own API keys instead of relying on the server's key pool. The Stage 8 build keeps all key access inside the rotation modules and confines pipeline access to `api/service.py`, so this remains a contained change rather than an endpoint-by-endpoint one — see Section 2j.
 
-### Stage 9 — Frontend (`frontend/`) — built last — NOT STARTED (directory does not exist yet)
-- `app.py` (Streamlit): file upload, mode selector, chat interface, citation display with expandable source text, inline image preview when an image-based source is cited
+### Stage 9 — Web UI (`DocSense-UI/`) — React + Vite, built last (Section 2l)
+- `src/pages/`: `Home` (landing page), `GetStarted` (mode choice and PDF upload; the files are kept in the browser's IndexedDB), `Chat` (questions, answers, cited sources and a PDF preview) and `Terms`
+- `src/lib/api.js`: HTTP client for the Stage 8 API. `src/lib/chatConfig.js`: upload, ingestion polling, `POST /query`, and conversion of the response for display. `src/lib/modes.js`: the three modes and the two answer styles
+- `src/components/chat/`: `AnswerCard` (answer, cited sources with page links, provider and model) and `RichText` (renders the answer as React elements, never raw HTML, with clickable `[n]` citations)
 
 ---
 
@@ -839,8 +882,8 @@ docsense/
 │   └── run_eval.py
 ├── api/
 │   └── main.py
-├── frontend/            # built last (Stage 9)
-│   └── app.py
+├── DocSense-UI/         # Stage 9 web UI, React + Vite (Section 2l)
+│   └── src/
 ├── data/
 │   ├── sample_docs/      # test documents (see Section 9)
 │   └── eval/             # evaluation Q&A set
@@ -890,4 +933,4 @@ DocSense requires **no training data**, since every model used is pre-trained an
 - [ ] Image-embedded charts/diagrams are detected, analyzed, and answerable
 - [ ] `run_eval.py` produces an accuracy report ≥85% on the manual eval set
 - [ ] FastAPI endpoints (`/upload`, `/query`) are functional and documented (OpenAPI/Swagger)
-- [ ] Streamlit frontend built last, wired to the API, and demoable end-to-end
+- [ ] Web UI built last (React + Vite instead of the planned Streamlit, Section 2l), wired to the API, and demoable end-to-end

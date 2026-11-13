@@ -9,10 +9,10 @@
 [![Gemini](https://img.shields.io/badge/Google_Gemini-Vision_%7C_Embeddings-4285F4?style=flat&logo=googlegemini&logoColor=white)](https://ai.google.dev/)
 [![Providers](https://img.shields.io/badge/Answer_LLMs-7_provider_rotation-6E40C9?style=flat)](./TDR.md)
 [![Qdrant](https://img.shields.io/badge/Qdrant-Vector_DB-DC244C?style=flat&logo=qdrant&logoColor=white)](https://qdrant.tech/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-Frontend-FF4B4B?style=flat&logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![React](https://img.shields.io/badge/React_%2B_Vite-Frontend-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat)](LICENSE)
 
-**Build status:** Stages 1–6 complete and independently verified · Stage 7 evaluation framework built · Stage 8 API layer complete · Stage 9 not started
+**Build status:** Stages 1–6 complete and independently verified · Stage 7 evaluation framework built · Stage 8 API layer complete · Stage 9 web UI built
 
 </div>
 
@@ -49,7 +49,7 @@ No model training is required. DocSense orchestrates pre-trained LLM, embedding,
 | 6 — Answer Generation | ✅ Complete | Generates the final cited answer from retrieved context |
 | 7 — Evaluation Framework | ✅ Built | Two separately-reported metrics — a deterministic retrieved-page check and LLM-graded answer correctness on a fixed verdict scale — plus a multi-document coverage check |
 | 8 — API Layer | ✅ Complete | FastAPI endpoints for health, upload/ingest, list, delete and query |
-| 9 — Frontend UI | ⏳ Not started | Streamlit interface, built last (`frontend/` does not exist yet) |
+| 9 — Web UI | ✅ Built | React + Vite site in `DocSense-UI/`: PDF upload, the three Q&A modes, Summary or Exact-quote answers with clickable page citations, connected to the API |
 
 Every completed stage has been manually tested against 6 real sample documents (including real-world legal contracts from the [CUAD dataset](https://www.atticusprojectai.org/cuad)) and independently verified — not just accepted on the agent's word.
 
@@ -80,7 +80,7 @@ Evaluation (retrieval accuracy + LLM-graded correctness)   ← Stage 7, built
 FastAPI Layer (single process, one shared Qdrant client)   ← Stage 8, complete
       │
       ▼
-Streamlit UI                                               ← Stage 9, not started
+Web UI (React + Vite, DocSense-UI/)                        ← Stage 9, built
 ```
 
 Full architectural detail, module responsibilities, and data schemas are documented in [`TDR.md`](./TDR.md). Product scope and build stages are documented in [`PRD.md`](./PRD.md).
@@ -101,7 +101,7 @@ Full architectural detail, module responsibilities, and data schemas are documen
 | HTTP client | `httpx` — all 7 answer providers speak the OpenAI-compatible `/chat/completions` REST API, so no per-vendor SDK is required |
 | Backend API | FastAPI — single process, one shared Qdrant client (TDR Section 2j) |
 | Evaluation | Custom scoring script — `evaluation/run_eval.py` + `evaluation/llm_judge.py`. **RAGAS is not called by the code**; it remains in `requirements.txt` as a candidate for continuous scoring later |
-| Frontend | Streamlit *(Stage 9, not started)* |
+| Frontend (Stage 9) | React 18 + Vite 5, React Router and Tailwind CSS, in `DocSense-UI/`. Streamlit was the original plan (TDR Section 2l) |
 
 ### Answer providers (generation + grading)
 
@@ -121,7 +121,7 @@ The two disabled providers are configured but never called, each logging one lin
 
 **Embeddings and image analysis deliberately stay on the Gemini key pool** and are not part of this rotation.
 
-> **Note:** TDR.md originally specified Claude (vision + generation), Voyage AI (embeddings), Dockerized Qdrant, and RAGAS. Each was deliberately substituted during the V1 build, and every substitution is documented with its reasoning, what stays unchanged, and a trigger for reconsidering it. See [`TDR.md`](./TDR.md) Sections 2a–2i for the full decision log.
+> **Note:** TDR.md originally specified Claude (vision + generation), Voyage AI (embeddings), Dockerized Qdrant, and RAGAS. Each was deliberately substituted during the V1 build, and every substitution is documented with its reasoning, what stays unchanged, and a trigger for reconsidering it. See [`TDR.md`](./TDR.md) Sections 2a–2l for the full decision log.
 
 ## Project Structure
 
@@ -167,6 +167,11 @@ DocSense/
 │   ├── service.py                  #   only module importing Stages 1-6
 │   ├── errors.py                   #   exception -> HTTP mapping
 │   └── test_stage8_api.py          #   mocked tests, zero API calls
+├── DocSense-UI/                    # Stage 9 — web UI (React + Vite)
+│   ├── src/pages/                  #   Home, GetStarted, Chat, Terms
+│   ├── src/lib/                    #   api.js (API client), chatConfig.js, modes.js
+│   ├── public/                     #   logos and the home-page video
+│   └── vite.config.js              #   forwards /api/... to the API on port 8000
 ├── data/
 │   ├── sample_docs/                # 6 test documents (synthetic + real CUAD contracts)
 │   ├── eval/                       # cuad_sample_eval.json — labeled Q&A set
@@ -176,12 +181,12 @@ DocSense/
 ├── .env                            # Local keys — gitignored, never committed
 ├── .env.example                    # Template with empty values, safe to commit
 ├── PRD.md                          # Product Requirements Document
-├── TDR.md                          # Technical Design Report (incl. deviations 2a–2i)
+├── TDR.md                          # Technical Design Report (incl. deviations 2a–2l)
 ├── requirements.txt
 └── README.md
 ```
 
-Not created yet: `frontend/` (Stage 9). `evaluation/results/` is created on the first completed evaluation run and is gitignored.
+`evaluation/results/` is created on the first completed evaluation run and is gitignored.
 
 ## Getting Started
 
@@ -245,8 +250,8 @@ uvicorn api.main:app --port 8000
 # Stage 8 mocked tests (no API calls)
 python -m api.test_stage8_api
 
-# Stage 9 is not built yet:
-#   streamlit run frontend/app.py     # frontend/ does not exist
+# Stage 9 — the web UI, in a second terminal while the API runs (see "Web UI (Stage 9)" below)
+cd DocSense-UI && npm install && npm run dev
 ```
 
 Qdrant runs in local embedded mode by default — no separate database server needed. Note that it takes an exclusive lock on its storage directory, so only one process can use the vector store at a time.
@@ -323,6 +328,26 @@ Upload cap is 25 MB; uploads land in `data/uploads/` (gitignored). CORS is restr
 
 `evidence.sources` carries **every** retrieved chunk with its `source_number`, cited or not — match `source_number` against `core.citations` to highlight the ones the answer actually used. `meta.citation_check` is Stage 6's own cross-check of the model's citations against what was really retrieved.
 
+## Web UI (Stage 9)
+
+A React + Vite site in `DocSense-UI/`, connected to the API above (TDR Section 2l).
+
+```bash
+# Terminal 1, from the project root: the API
+uvicorn api.main:app --port 8000
+
+# Terminal 2: the UI (needs Node.js 18 or newer)
+cd DocSense-UI
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`. Use `localhost`, because the dev server may not answer on `127.0.0.1`. The dev server forwards `/api/...` requests to the API on port 8000, so the API's CORS settings need no change; set `DOCSENSE_API_URL` to use another address.
+
+- **Get Started:** choose General Q&A, Multi-Doc or Legal Precision, then add PDFs (up to 25 MB each, the API's limit).
+- **Chat:** the files are sent to the API when the page opens, unless a document with the same file name is already stored. Answers show clickable `[n]` citations, the cited passages with links to their pages in the PDF preview, and the provider and model that answered. The API's warnings appear under the answer as a note.
+- **Summary | Exact quotes:** a header toggle that sets `answer_style` for each question. General Q&A and Multi-Doc start on Summary. Legal Precision always uses Exact quotes, because its prompt asks for the exact clause text.
+
 ## Evaluation
 
 Accuracy is measured, not assumed. The framework runs a labeled question set — including real, expert-annotated clause data from CUAD — through the full pipeline.
@@ -365,7 +390,7 @@ TDR Section 2k has the details, including an aborted first attempt and the first
 
 | Version | Scope |
 |---|---|
-| **V1** (in progress — Stages 1–8 complete, UI remaining) | PDF, DOCX, TXT + embedded image analysis, 3 Q&A modes |
+| **V1** (Stages 1–9 built; minor fixes and speed work pending) | PDF, DOCX, TXT + embedded image analysis, 3 Q&A modes |
 | V2 | PPTX, XLSX/CSV support |
 | V3 | Password-protected PDFs, legacy `.DOC`, handwriting OCR |
 | V4 | Multi-user support, persistent history, confidence scoring UI |
@@ -399,13 +424,18 @@ Documented honestly rather than hidden. Full reasoning for each is in [`TDR.md`]
 - **Answer writers can misspell file names.** In both the 2026-11-02 run and the final run, one answer's heading spelled a contract file as `..._SERVICES_AGEM.pdf` instead of `..._SERVICES_AGREEM.pdf` (Q22). *(TDR 2k)*
 - **The low-confidence warning is noisy.** It fired on 11 of the 23 answers in the final run. *(TDR 2k)*
 - **An empty OpenRouter reply has no logged `finish_reason`.** In the final run's first attempt, OpenRouter returned HTTP 200 with empty content while grading. That path does not log `finish_reason`, so the cause is unproven. *(TDR 2k)*
+- **Answers through the UI take about 15–60 s.** In a five-question test, questions took 16–57 s. The reranker runs on the CPU, at about 11–12 s per question and about 48 s on the first question after the API starts, and slow or failing providers added up to about 44 s. Speed fixes are planned. *(TDR 2l)*
+- **The web UI reuses stored documents by file name.** The API names a document after its file, so a changed file with the same name is answered from the old copy until you delete it (`DELETE /documents/{doc_id}`) or rename the file. *(TDR 2l)*
+- **The web UI has no chat memory.** Each question is answered on its own. *(TDR 2l)*
+- **Summary answers are not covered by the Stage 7 results**, which used Exact quotes (`answer_style: "full"`). *(TDR 2l)*
+- **The UI's `/api` forwarding exists only in `npm run dev` and `npm run preview`.** Hosting the built site needs `/api` routed to the API, or `VITE_API_BASE_URL` plus a CORS change on the API. *(TDR 2l)*
 - **Free-tier terms and limits apply.** Some providers' free tiers carry usage caps and non-commercial restrictions, and running an evaluation suite repeatedly can exhaust them. Several providers' current quotas and context windows could **not** be verified from official documentation and are deliberately not quoted here. *(TDR 2i)*
 - **Multi-key rotation is a development-volume workaround**, not a production rate-limiting strategy. *(TDR 2d)*
 
 ## Documentation
 
 - [`PRD.md`](./PRD.md) — Product requirements, scope, and build stages
-- [`TDR.md`](./TDR.md) — Technical architecture, schemas, module design, and the full log of documented deviations from the original spec (Sections 2a–2k)
+- [`TDR.md`](./TDR.md) — Technical architecture, schemas, module design, and the full log of documented deviations from the original spec (Sections 2a–2l)
 
 ## License
 
