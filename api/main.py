@@ -48,13 +48,15 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Stage 9's Streamlit UI will call this from the browser. Localhost
-# origins only — this API has no auth yet, so it must not be reachable
-# from arbitrary origins.
+# The Stage 9 web UI (DocSense-UI/, React + Vite) needs no entry here: it
+# calls this API through the Vite dev/preview proxy, so the browser sees
+# every request as same-origin (TDR Section 2l). Direct browser calls are
+# limited to localhost origins — this API has no auth yet, so it must not
+# be reachable from arbitrary origins.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:8501",  # Streamlit default
+        "http://localhost:8501",  # Streamlit's default port (the originally planned UI)
         "http://127.0.0.1:8501",
         "http://localhost:3000",
         "http://127.0.0.1:3000",

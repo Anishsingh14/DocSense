@@ -64,9 +64,6 @@ httpx==0.28.1              # ADDED 2026-10-27 (was previously relied on only tra
 ragas==0.1.20
 datasets==3.0.1
 
-# --- Frontend (Stage 9 only) ---
-streamlit==1.39.0
-
 # --- Utilities ---
 numpy==1.26.4
 pandas==2.2.3
