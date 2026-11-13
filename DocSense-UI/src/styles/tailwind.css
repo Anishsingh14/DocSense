@@ -1,0 +1,6 @@
+/* Tailwind's global "preflight" reset is disabled (see tailwind.config.js) so it cannot restyle the
+   other pages. The home page gets the same reset, scoped to .home-root, from home-preflight.css. */
+/* @tailwind base only emits Tailwind's --tw-* variable defaults here (preflight is off); gradients, shadows and transforms need them. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

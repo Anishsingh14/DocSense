@@ -1,0 +1,2 @@
+/* Page-independent basics. Everything else is scoped per page (see html[data-page] in each stylesheet). */
+body { margin: 0; }

@@ -1,0 +1,40 @@
+:root {
+    /* Palette: Navy #0A2947, Beige #F3E4C9, Sage #D3D4C0, Brown #8B5E3C (+ derived tints/shades) */
+    /* Brand surfaces */
+    --ds-page: 243 228 201;          /* #F3E4C9 Beige */
+    --ds-section: 211 212 192;       /* #D3D4C0 Sage */
+    --ds-card: 250 244 232;          /* #FAF4E8 Light beige tint */
+    --ds-raised: 253 249 241;        /* #FDF9F1 Lightest beige */
+    --ds-shade: 214 196 160;         /* #D6C4A0 Deep beige (borders, chips) */
+    --ds-khaki: 139 94 60;           /* #8B5E3C Brown */
+    /* Typography + dark surfaces */
+    --ds-ink: 10 41 71;              /* #0A2947 Navy */
+    --ds-burgundy: 6 28 50;          /* #061C32 Deeper navy (hover) */
+    --ds-espresso: 4 20 36;          /* #041424 Deepest navy */
+    --ds-muted: 52 74 98;            /* #344A62 Muted navy */
+    --ds-placeholder: 92 106 122;    /* #5C6A7A Soft navy-grey */
+    /* Text + fills used on dark surfaces */
+    --ds-gold: 243 228 201;          /* #F3E4C9 Beige */
+    --ds-cream: 228 208 170;         /* #E4D0AA Deeper beige (hover) */
+    --ds-sand: 211 212 192;          /* #D3D4C0 Sage */
+    --ds-clay: 168 140 104;          /* #A88C68 Light brown */
+    --ds-overlay: 5 22 40;           /* #051628 scrims, backdrops, shadows */
+    /* State colors */
+    --ds-danger: 185 28 28;          /* #B91C1C */
+    --ds-success: 4 120 87;          /* #047857 */
+    --ds-success-deep: 6 95 70;      /* #065F46 */
+    --ds-success-soft: 226 240 224;  /* #E2F0E0 */
+    --ds-success-line: 158 197 165;  /* #9EC5A5 */
+    /* Clause highlight */
+    --ds-highlight: 236 218 178;     /* #ECDAB2 */
+    --ds-highlight-mark: 226 203 156;/* #E2CB9C */
+    --ds-highlight-line: 139 94 60;  /* #8B5E3C */
+    /* Document format chips + mockup chrome */
+    --ds-doc-pdf: 160 48 48;         /* #A03030 */
+    --ds-doc-docx: 29 78 216;        /* #1D4ED8 */
+    --ds-doc-txt: 51 65 85;          /* #334155 */
+    --ds-dot-close: 192 80 75;       /* #C0504B */
+    --ds-dot-minimize: 216 154 62;   /* #D89A3E */
+    --ds-dot-maximize: 62 158 118;   /* #3E9E76 */
+    --ds-live: 52 169 111;           /* #34A96F */
+  }

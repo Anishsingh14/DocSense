@@ -1,0 +1,68 @@
+/* Tailwind v3 preflight, scoped to the home page wrapper (.home-root) with zero specificity so utility classes still win. */
+:where(.home-root) {
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  -moz-tab-size: 4;
+  tab-size: 4;
+  font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+  font-feature-settings: normal;
+  font-variation-settings: normal;
+  -webkit-tap-highlight-color: transparent;
+}
+:where(.home-root) *, :where(.home-root) ::before, :where(.home-root) ::after {
+  box-sizing: border-box;
+  border-width: 0;
+  border-style: solid;
+  border-color: currentColor;
+}
+:where(.home-root) ::before, :where(.home-root) ::after { --tw-content: ''; }
+:where(.home-root) hr { height: 0; color: inherit; border-top-width: 1px; }
+:where(.home-root) abbr:where([title]) { text-decoration: underline dotted; }
+:where(.home-root) h1, :where(.home-root) h2, :where(.home-root) h3, :where(.home-root) h4, :where(.home-root) h5, :where(.home-root) h6 { font-size: inherit; font-weight: inherit; }
+:where(.home-root) a { color: inherit; text-decoration: inherit; }
+:where(.home-root) b, :where(.home-root) strong { font-weight: bolder; }
+:where(.home-root) code, :where(.home-root) kbd, :where(.home-root) samp, :where(.home-root) pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 1em;
+}
+:where(.home-root) small { font-size: 80%; }
+:where(.home-root) sub, :where(.home-root) sup { font-size: 75%; line-height: 0; position: relative; vertical-align: baseline; }
+:where(.home-root) sub { bottom: -0.25em; }
+:where(.home-root) sup { top: -0.5em; }
+:where(.home-root) table { text-indent: 0; border-color: inherit; border-collapse: collapse; }
+:where(.home-root) button, :where(.home-root) input, :where(.home-root) optgroup, :where(.home-root) select, :where(.home-root) textarea {
+  font-family: inherit;
+  font-feature-settings: inherit;
+  font-variation-settings: inherit;
+  font-size: 100%;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  margin: 0;
+  padding: 0;
+}
+:where(.home-root) button, :where(.home-root) select { text-transform: none; }
+:where(.home-root) button, :where(.home-root) input:where([type='button']), :where(.home-root) input:where([type='reset']), :where(.home-root) input:where([type='submit']) {
+  -webkit-appearance: button;
+  background-color: transparent;
+  background-image: none;
+}
+:where(.home-root) :-moz-focusring { outline: auto; }
+:where(.home-root) :-moz-ui-invalid { box-shadow: none; }
+:where(.home-root) progress { vertical-align: baseline; }
+:where(.home-root) summary { display: list-item; }
+:where(.home-root) blockquote, :where(.home-root) dl, :where(.home-root) dd, :where(.home-root) h1, :where(.home-root) h2, :where(.home-root) h3, :where(.home-root) h4,
+:where(.home-root) h5, :where(.home-root) h6, :where(.home-root) hr, :where(.home-root) figure, :where(.home-root) p, :where(.home-root) pre { margin: 0; }
+:where(.home-root) fieldset { margin: 0; padding: 0; }
+:where(.home-root) legend { padding: 0; }
+:where(.home-root) ol, :where(.home-root) ul, :where(.home-root) menu { list-style: none; margin: 0; padding: 0; }
+:where(.home-root) dialog { padding: 0; }
+:where(.home-root) textarea { resize: vertical; }
+:where(.home-root) input::placeholder, :where(.home-root) textarea::placeholder { opacity: 1; color: #9ca3af; }
+:where(.home-root) button, :where(.home-root) [role="button"] { cursor: pointer; }
+:where(.home-root) :disabled { cursor: default; }
+:where(.home-root) img, :where(.home-root) svg, :where(.home-root) video, :where(.home-root) canvas, :where(.home-root) audio,
+:where(.home-root) iframe, :where(.home-root) embed, :where(.home-root) object { display: block; vertical-align: middle; }
+:where(.home-root) img, :where(.home-root) video { max-width: 100%; height: auto; }
+:where(.home-root) [hidden] { display: none; }
