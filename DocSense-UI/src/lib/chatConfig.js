@@ -201,24 +201,40 @@ export function toAnswerData(res) {
   const provider = id
     ? { name: CHAT_CONFIG.providerNames[id] || String(id).replace(/^RAG_/, '').replace(/_/g, ' '), model: meta.model_used || '' }
     : null;
-  return { answer, sources, provider };
+  const cited = citations.map((c) => ({ source_number: c.source_number, doc_name: c.doc_name, page_num: c.page_num }));
+  return { answer, sources, provider, citations: cited, warning: warning || null };
+}
+
+/** The given document IDs that the server still stores. If the server can't be reached, all are kept. */
+export async function keepStoredDocIds(ids) {
+  if (!ids.length) return ids;
+  try {
+    const res = await listDocuments();
+    const stored = new Set((res && Array.isArray(res.documents) ? res.documents : []).map((d) => d.doc_id));
+    return ids.filter((id) => stored.has(id));
+  } catch (e) {
+    return ids;
+  }
 }
 
 /** Sends one question to the backend and resolves to AnswerCard's data. Errors carry a `code` (see describeError). */
-export async function askBackend({ question, mode, answerStyle, session, files, history }) {
+export async function askBackend({ question, mode, answerStyle, session, files, docIds, history }) {
   const style = resolveStyle(mode, answerStyle);
   const ctx = { question, mode, answerStyle: style, fileName: session.fileName || '', file: files[0] || null, files, history };
   if (window.DocSenseAPI && typeof window.DocSenseAPI.ask === 'function') return window.DocSenseAPI.ask(ctx);
 
-  if (!files.length) throw new ApiError('no-document');
-  const docIds = await prepareDocuments(files);
+  // The files from Get Started decide the documents; without them, the saved chat's document IDs are used.
+  let ids;
+  if (files.length) ids = [...new Set(await prepareDocuments(files))];
+  else if (Array.isArray(docIds) && docIds.length) ids = [...new Set(docIds)];
+  else throw new ApiError('no-document');
   const apiMode = (modeByKey(mode) || {}).api || 'single_doc';
   try {
     const res = await queryDocuments(
-      { question, mode: apiMode, doc_ids: [...new Set(docIds)], answer_style: style },
+      { question, mode: apiMode, doc_ids: ids, answer_style: style },
       CHAT_CONFIG.api.queryTimeoutMs,
     );
-    return { ...toAnswerData(res), style };
+    return { ...toAnswerData(res), style, docIds: ids };
   } catch (err) {
     // The server no longer has a document (deleted, or its store was reset): forget it so the next question uploads it again.
     if (err && err.code === 'not-found') files.forEach((f) => prepared.delete(fileKey(f)));

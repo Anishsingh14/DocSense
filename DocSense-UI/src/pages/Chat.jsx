@@ -4,9 +4,9 @@ import { usePage } from '../hooks/usePage';
 import { useToast } from '../hooks/useToast';
 import Waves from '../components/common/Waves';
 import AnswerCard from '../components/chat/AnswerCard';
-import { CHAT_CONFIG, askBackend, describeError, prepareDocuments } from '../lib/chatConfig';
+import { CHAT_CONFIG, askBackend, describeError, keepStoredDocIds, prepareDocuments } from '../lib/chatConfig';
 import { ANSWER_STYLES, DEFAULT_MODE, isMultiFile, modeByKey, resolveStyle } from '../lib/modes';
-import { loadAnswerStyle, loadFiles, loadSessionMeta, saveAnswerStyle } from '../lib/session';
+import { loadAnswerStyle, loadChat, loadFiles, loadSessionMeta, saveAnswerStyle, saveChat } from '../lib/session';
 import '../styles/chat.css';
 
 const AiAvatar = ({ loading }) => (
@@ -70,8 +70,10 @@ export default function Chat() {
   usePage({ page: 'chat', title: 'Ask your document | DocSense', themeColor: '#D3D4C0' });
 
   const session = useMemo(() => loadSessionMeta(), []);
-  const mode = modeByKey(session.mode) ? session.mode : DEFAULT_MODE;
-  const modeLabel = session.modeLabel || modeByKey(mode).label;
+  const saved = useMemo(() => loadChat(), []);
+  // The mode chosen on Get Started in this tab wins; otherwise the saved chat's mode; otherwise the default.
+  const mode = modeByKey(session.mode) ? session.mode : (modeByKey(saved.mode) ? saved.mode : DEFAULT_MODE);
+  const modeLabel = (mode === session.mode && session.modeLabel) || modeByKey(mode).label;
   const pickDocument = isMultiFile(mode);
   const styleLocked = !!modeByKey(mode).styleLocked;
   const [answerStyle, setAnswerStyle] = useState(() => resolveStyle(mode, loadAnswerStyle()));
@@ -80,11 +82,17 @@ export default function Chat() {
   const [urls, setUrls] = useState({});
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => saved.messages.map((m) => ({ ...m, id: nextId++ })));
+  const [docIds, setDocIds] = useState(saved.docIds);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [toast, showToast] = useToast(2800);
-  const history = useRef([]);
+  const history = useRef(null);
+  if (history.current === null) {
+    history.current = saved.messages
+      .filter((m) => m.type !== 'error')
+      .map((m) => (m.type === 'user' ? { role: 'user', content: m.text } : { role: 'assistant', content: m.data.answer }));
+  }
   const textareaRef = useRef(null);
 
   const started = messages.length > 0;
@@ -107,7 +115,9 @@ export default function Chat() {
       if (list.length) {
         prepareDocuments(list, ({ state, file }) => {
           if (!cancelled) showToast(CHAT_CONFIG.text[state].replace('{file}', file));
-        }).catch((err) => { if (!cancelled) showToast(describeError(err)); });
+        })
+          .then((ids) => { if (!cancelled) setDocIds([...new Set(ids)]); })
+          .catch((err) => { if (!cancelled) showToast(describeError(err)); });
       }
     });
     return () => {
@@ -117,10 +127,28 @@ export default function Chat() {
   }, []);
 
   useEffect(() => {
-    if (!session.fileName) showToast(CHAT_CONFIG.text.noDocument);
+    if (!session.fileName && !saved.docIds.length) showToast(CHAT_CONFIG.text.noDocument);
     textareaRef.current?.focus({ preventScroll: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /* Saved chat: forget saved document IDs the server no longer returns */
+  useEffect(() => {
+    let cancelled = false;
+    if (saved.docIds.length) {
+      keepStoredDocIds(saved.docIds).then((kept) => {
+        const gone = saved.docIds.filter((id) => !kept.includes(id));
+        if (!cancelled && gone.length) setDocIds((cur) => cur.filter((id) => !gone.includes(id)));
+      });
+    }
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* Saved chat: write the mode, document IDs and messages after every change */
+  useEffect(() => {
+    saveChat({ mode, docIds, messages });
+  }, [mode, docIds, messages]);
 
   /* Page-level state classes used by the stylesheet (centred prompt, preview open) */
   useEffect(() => {
@@ -167,8 +195,11 @@ export default function Chat() {
 
     let reply;
     try {
-      const data = await askBackend({ question: q, mode, answerStyle, session, files, history: history.current.slice(0, -1) });
-      if (!data || typeof data.answer !== 'string' || !data.answer.trim()) throw new Error('empty');
+      const { docIds: usedIds, ...data } = (await askBackend({
+        question: q, mode, answerStyle, session, files, docIds, history: history.current.slice(0, -1),
+      })) || {};
+      if (typeof data.answer !== 'string' || !data.answer.trim()) throw new Error('empty');
+      if (Array.isArray(usedIds) && usedIds.length) setDocIds(usedIds);
       history.current.push({ role: 'assistant', content: data.answer });
       reply = { id: loadingId, type: 'answer', data };
     } catch (err) {
@@ -181,6 +212,13 @@ export default function Chat() {
     setMessages((m) => m.map((x) => (x.id === loadingId ? reply : x)));
     setBusy(false);
     textareaRef.current?.focus();
+  };
+
+  /* Clear chat: empties the conversation on screen and in the saved chat (the mode and documents stay). */
+  const clearChat = () => {
+    if (busy) return;
+    setMessages([]);
+    history.current = [];
   };
 
   /* Answer style for the next question; the choice is kept for the browser session. */
@@ -260,6 +298,20 @@ export default function Chat() {
       </header>
 
       <main className="ch-main" id="main">
+        <div className="ch-clear-row">
+          <button
+            className="ch-clear"
+            disabled={busy || !messages.length}
+            title="Delete this conversation from this browser"
+            type="button"
+            onClick={clearChat}
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 7h16M9 7V4h6v3M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M10 11v6M14 11v6" />
+            </svg>
+            <span>Clear chat</span>
+          </button>
+        </div>
         <div aria-live="polite" className="ch-thread" role="log">
           {messages.map((m) => {
             if (m.type === 'user') {
