@@ -85,10 +85,6 @@ PROVIDERS: List[ProviderConfig] = [
         "openai/gpt-oss-20b", True,
     ),
     ProviderConfig(
-        "RAG_NVIDIA", "https://integrate.api.nvidia.com/v1",
-        "minimaxai/minimax-m3.1-flash", True,
-    ),
-    ProviderConfig(
         "RAG_Cohere", "https://api.cohere.ai/compatibility/v1",
         "command-r-08-2024", True,
     ),
@@ -98,6 +94,10 @@ PROVIDERS: List[ProviderConfig] = [
         # model is read back out of the response body and reported as
         # model_used — see _extract_model_used.
         "openrouter/free", True,
+    ),
+    ProviderConfig(
+        "RAG_NVIDIA", "https://integrate.api.nvidia.com/v1",
+        "minimaxai/minimax-m3.1-flash", True,
     ),
     ProviderConfig(
         "RAG_Gemini", "https://generativelanguage.googleapis.com/v1beta/openai",

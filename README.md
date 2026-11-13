@@ -117,6 +117,8 @@ Rotation is **sticky**: one provider serves every question until it fails, then 
 | — | `RAG_SiliconFlow` | `Qwen/Qwen2.5-7B-Instruct` | no |
 | — | `RAG_OpenCode_Console` | `deepseek-v4.1-flash` | no |
 
+**Rotation order since 2026-11-13:** Groq, Cohere, OpenRouter, NVIDIA, Gemini. NVIDIA times out often, so it is tried only after the other three.
+
 The two disabled providers are configured but never called, each logging one line explaining why. Flip `enabled=True` on their entry in `generation/provider_rotation.py` to bring them back in.
 
 **Embeddings and image analysis deliberately stay on the Gemini key pool** and are not part of this rotation.

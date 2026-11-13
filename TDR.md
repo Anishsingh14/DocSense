@@ -361,6 +361,8 @@ New module: `generation/provider_rotation.py`. `GENERATION_MODELS` and `GRADING_
 | — | `RAG_SiliconFlow` | `Qwen/Qwen2.5-7B-Instruct` | **no** | HTTP 402, signup credit exhausted |
 | — | `RAG_OpenCode_Console` | `deepseek-v4.1-flash` | **no** | free models HTTP 403 (client-gated), paid HTTP 402 |
 
+**Order changed on 2026-11-13:** Groq, Cohere, OpenRouter, NVIDIA, Gemini. NVIDIA times out often, so it is tried only after the other three.
+
 Disabled providers are never called and emit one startup line explaining why, so a short rotation list is never mistaken for a bug.
 
 ### Known limitations
