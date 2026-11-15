@@ -3,8 +3,8 @@
 
 **Version:** 1.0 (V1 Scope)
 **Companion document to:** PRD.md
-**Status:** Stages 1–6 built and verified; Stage 7 (evaluation framework) built; Stage 8 (API layer) complete; Stage 9 (web UI) built
-**Last Updated:** 2026-11-13 (Section 2l added: the Stage 9 web UI, built as a React + Vite site instead of Streamlit, how it connects to the API, its answer style toggle, verification and known limitations; the architecture diagram, tech stack, Section 4, repository structure and Definition of Done now name it. Previously 2026-11-03: Section 2k: the final Stage 7 run on HEAD 3b9c014, which replaces the 2026-11-02 run as the headline result, with its aborted first attempt, the first live truncation warning (Q7) and updated known limitations; Section 2f's status now cites the final run. Earlier the same day: Section 2k: the Q21 truncation fix and its live check, the 2026-11-02 full run, a correction to the claim that the 2,048 cap fixed Q21, and new known limitations. Previously 2026-11-01: Section 2k extended: the authorised multi_doc Stage 6 exception and its live check, the judge-only re-grade and its caveat, and NVIDIA's intermittent timeouts. Earlier the same day: Section 2k added — Stage 7 follow-up: per-document retrieval guarantee and opening chunk for legal/multi_doc, three judge rules, grader independence, and the measured before/after results; Section 2f's status now points to 2k. Previously 2026-10-28: Section 2j added — Stage 8 FastAPI layer: endpoint shapes, single-process/narrow-lock concurrency model, asynchronous ingestion, error mapping, and the two approved exceptions to "no changes in earlier stages". Previously 2026-10-27: documentation synced to the code as built: Stage 7 module list corrected to the three real dataset files and the actual verdict scale, Evaluation tech-stack row corrected — RAGAS is not called, Stage 8/9 marked not started. Section 2i, added 2026-10-26, documents the move of answer generation and grading from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
+**Status:** Stages 1–6 built and verified; Stage 7 (evaluation framework) built; Stage 8 (API layer) complete; Stage 9 (web UI) built and run through Docker Compose (Section 2m)
+**Last Updated:** 2026-11-15 (Section 2m added: the Docker Compose distribution, the realigned requirements.txt, verification, the later frontend changes, and the known gap that the web upload page accepts PDF only. Previously 2026-11-13: Section 2l added: the Stage 9 web UI, built as a React + Vite site instead of Streamlit, how it connects to the API, its answer style toggle, verification and known limitations; the architecture diagram, tech stack, Section 4, repository structure and Definition of Done now name it. Previously 2026-11-03: Section 2k: the final Stage 7 run on HEAD 3b9c014, which replaces the 2026-11-02 run as the headline result, with its aborted first attempt, the first live truncation warning (Q7) and updated known limitations; Section 2f's status now cites the final run. Earlier the same day: Section 2k: the Q21 truncation fix and its live check, the 2026-11-02 full run, a correction to the claim that the 2,048 cap fixed Q21, and new known limitations. Previously 2026-11-01: Section 2k extended: the authorised multi_doc Stage 6 exception and its live check, the judge-only re-grade and its caveat, and NVIDIA's intermittent timeouts. Earlier the same day: Section 2k added — Stage 7 follow-up: per-document retrieval guarantee and opening chunk for legal/multi_doc, three judge rules, grader independence, and the measured before/after results; Section 2f's status now points to 2k. Previously 2026-10-28: Section 2j added — Stage 8 FastAPI layer: endpoint shapes, single-process/narrow-lock concurrency model, asynchronous ingestion, error mapping, and the two approved exceptions to "no changes in earlier stages". Previously 2026-10-27: documentation synced to the code as built: Stage 7 module list corrected to the three real dataset files and the actual verdict scale, Evaluation tech-stack row corrected — RAGAS is not called, Stage 8/9 marked not started. Section 2i, added 2026-10-26, documents the move of answer generation and grading from the Gemini-only model chain to rotation across 7 independent providers; embeddings and image reading stay on Gemini)
 
 ---
 
@@ -687,6 +687,53 @@ The Chat header has a **Summary | Exact quotes** toggle that sets `answer_style`
 - **Summary answers are unmeasured.** The Stage 7 runs used `full`.
 - **The `/api` forwarding exists only in `npm run dev` and `npm run preview`.** Hosting the built site needs `/api` routed to the API, or `VITE_API_BASE_URL` plus a CORS change.
 - **No login.** Like the API (Section 2j), the UI is for local use.
+
+---
+
+## 2m. Docker Compose Distribution, Tested Environment and Later Frontend Changes
+
+**Date:** 2026-11-15
+**Status:** In the repository (commits `f43b628`, `1d824b9` and `4786900`). Stages 1–8 are unchanged.
+
+### 1. Docker Compose distribution
+
+**Why a local Docker setup and not free hosting.** The re-ranker needs about 2.3 GB of memory. Render's free plan has 512 MB, so the backend cannot run there. Docker Compose lets anyone run the same setup on their own machine.
+
+**Image design** (`Dockerfile`):
+- Python 3.13.2 slim base, with Tesseract and Poppler installed.
+- CPU-only PyTorch 2.13.0, installed from the PyTorch CPU index before `requirements.txt`, so the image avoids the multi-GB GPU build.
+- One uvicorn process. The embedded Qdrant store takes an exclusive lock, so no `--workers` and no `--reload`.
+- A non-root user (`app`).
+- Measured sizes: backend 2.34 GB on disk, frontend 95.2 MB.
+
+**Compose** (`docker-compose.yml`):
+- Keys come only from the user's `.env` file through `env_file`. They are never copied into an image.
+- Four named volumes: the vector store, the uploads, the processed files and the model cache (`HF_HOME=/models`). Documents and the downloaded re-ranker survive restarts.
+- The backend has a healthcheck on `/health`. The frontend starts after the backend is healthy.
+- The site is published on port 8080. The backend has no published port.
+- nginx (`DocSense-UI/nginx.conf`) serves the built UI and forwards `/api` to the backend, so the browser sees one origin and no CORS setup is needed.
+- The 2.3 GB re-ranker is downloaded on first use. It is not in the image.
+
+`start.bat` is the alternative for running without Docker on Windows.
+
+### 2. requirements.txt realigned
+
+12 pins differed from the environment that produced the evaluation results: fastapi, uvicorn, python-multipart, pydantic, python-dotenv, pymupdf, python-docx, Pillow, datasets, numpy, pandas and tqdm. 6 listed packages were not installed and are not imported: llama-index, llama-index-embeddings-voyageai, llama-index-vector-stores-qdrant, FlagEmbedding, anthropic and ragas. The file now lists the direct dependencies at the installed versions, plus pins for torch (2.13.0), transformers (4.57.6) and numpy (2.3.5). pandas, tqdm and datasets were dropped because nothing imports them.
+
+### 3. Verification
+
+- The offline API tests pass inside the backend image: 66 passed, 0 failed (`python -m api.test_stage8_api`).
+- End-to-end run on Windows with Docker Desktop (WSL 2), reported by the project owner: an upload, a question with a cited answer, and a restart that kept the document and the downloaded model.
+- Not tested on macOS or Linux.
+
+### 4. Frontend
+
+The frontend is a React, Vite and Tailwind site in `DocSense-UI/` instead of the planned Streamlit app (see Section 2l). **Known gap:** the web upload page accepts PDF only for now. The backend and the API accept PDF, DOCX and TXT. DOCX and TXT upload in the web page is a planned fix.
+
+### 5. Provider order and saved chat
+
+- The provider order is now Groq, Cohere, OpenRouter, NVIDIA, Gemini (commit `1d824b9`). NVIDIA times out often, so it is tried only after the other three.
+- The chat page saves the conversation in the browser's localStorage under `docsense_chat_v1`: the mode, the document IDs and the last 50 messages. A "Clear chat" button empties it. No key or access code is stored (commit `4786900`).
 
 ---
 

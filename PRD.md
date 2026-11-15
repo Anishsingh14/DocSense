@@ -112,7 +112,7 @@ This project must be built in the following stages. Each stage should be indepen
 | 6 — Answer Generation | Complete |
 | 7 — Evaluation Framework | Built — framework in place (`evaluation/run_eval.py`, `evaluation/llm_judge.py`) |
 | 8 — API Layer | Complete — FastAPI app in `api/` (health, upload/ingest, list, delete, query) |
-| 9 — Frontend UI | Not started |
+| 9 — Frontend UI | Built — React frontend in `DocSense-UI`, run through Docker Compose with nginx. The web upload page accepts PDF only for now (the backend and API accept PDF, DOCX and TXT). |
 
 ### **Stage 1 — Ingestion & Parsing**
 Extract text and images from PDF/DOCX/TXT with page-number metadata preserved for every piece of content.
@@ -184,6 +184,7 @@ See **TDR.md, Section 9** for the full list of recommended public datasets, thei
 - Maximum document size for V1: 50 pages (larger docs deferred to a future version with chunked/batched processing).
 - The system relies on external LLM/embedding/vision APIs; an API key and internet access are required.
 - No user authentication in V1 — single-session, local use only.
+- V1 runs locally, through Docker Compose or `start.bat`, for a single user. Hosted deployment is not part of V1.
 
 ---
 
@@ -193,4 +194,4 @@ See **TDR.md, Section 9** for the full list of recommended public datasets, thei
 |---|---|
 | V2 | PPTX support, XLSX/CSV support (structured-data retrieval mode) |
 | V3 | Password-protected PDFs, old `.DOC` support, handwriting OCR |
-| V4 | Multi-user support, persistent history, hallucination-confidence scoring UI |
+| V4 | Multi-user support, persistent history, hallucination-confidence scoring UI, authentication with per-user documents, bring-your-own API key |
