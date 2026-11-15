@@ -1,295 +1,230 @@
 <div align="center">
 
+<img src="docs/assets/logo.png" alt="DocSense logo" width="160">
+
 # DocSense
 
-**Unified document intelligence — upload any document, ask questions, get page-cited answers.**
+Ask questions about your documents. Every answer comes with the page it was found on.
 
-[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Gemini](https://img.shields.io/badge/Google_Gemini-Vision_%7C_Embeddings-4285F4?style=flat&logo=googlegemini&logoColor=white)](https://ai.google.dev/)
-[![Providers](https://img.shields.io/badge/Answer_LLMs-7_provider_rotation-6E40C9?style=flat)](./TDR.md)
-[![Qdrant](https://img.shields.io/badge/Qdrant-Vector_DB-DC244C?style=flat&logo=qdrant&logoColor=white)](https://qdrant.tech/)
-[![React](https://img.shields.io/badge/React_%2B_Vite-Frontend-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat)](LICENSE)
-
-**Build status:** Stages 1–6 complete and independently verified · Stage 7 evaluation framework built · Stage 8 API layer complete · Stage 9 web UI built
+![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-61DAFB?logo=react&logoColor=black)
+![Vite](https://img.shields.io/badge/Vite-9135FF?logo=vite&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![nginx](https://img.shields.io/badge/nginx-009639?logo=nginx&logoColor=white)
+![Qdrant](https://img.shields.io/badge/Qdrant-DC244C?logo=qdrant&logoColor=white)
+![Hugging Face](https://img.shields.io/badge/Hugging_Face-FFD21E?logo=huggingface&logoColor=black)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow)
 
 </div>
 
----
-
 ## Overview
 
-DocSense is a Retrieval-Augmented Generation (RAG) system that answers questions from uploaded documents — PDF, DOCX, or TXT — and always cites the **exact page number** the answer came from. It also analyzes **images embedded in documents** (charts, diagrams, tables-as-images) so visual content is just as answerable as text.
+DocSense is a question answering tool for documents. You upload a file, ask a question in plain language, and get an answer with the page number it came from. It also reads charts and diagrams inside the file. It has three modes: general questions about one document, comparison across several documents, and exact-clause retrieval for legal text.
 
-No model training is required. DocSense orchestrates pre-trained LLM, embedding, and vision models through a retrieval pipeline — it does not fine-tune anything.
+This is Version 1. The backend and the API read PDF, DOCX and TXT files. The web page currently accepts PDF only; DOCX and TXT upload in the web page is planned. Later versions are listed in the [roadmap](#roadmap).
+
+## Quick start with Docker
+
+Follow these steps in order. You need an internet connection and several GB of free disk space.
+
+1. **Install Docker Desktop.** Download it from the Docker Desktop page on docker.com and install it. On Windows, if Docker asks for WSL 2, open PowerShell as administrator, run `wsl --install --no-distribution`, and restart the PC. Then open Docker Desktop and wait until it says it is running.
+2. **Download the project.** Either run `git clone https://github.com/Anishsingh14/DocSense.git`, or click the green **Code** button on the GitHub page, choose **Download ZIP**, and unzip the file.
+3. **Open a terminal in the project folder.** It is the folder that contains `docker-compose.yml`.
+4. **Create your keys file.** Copy `.env.example` to a new file named `.env`, open it, and paste your own free keys after the `=` signs:
+   - `GEMINI_API_KEY` is required. It is used for embeddings and for reading images. Get it from Google AI Studio.
+   - `RAG_Groq` is an answer provider. You need at least one answer-provider key. Groq is the first provider tried. Get its key from the Groq console.
+   - The other lines are optional. Leave unused lines empty.
+   - Never share your `.env` file.
+5. **Start the app.** Run `docker compose up --build`. The first build takes several minutes and downloads a few GB. It is finished when the log shows the backend as healthy and the frontend as started.
+6. **Open the site.** Go to this address in a browser:
+
+   **http://localhost:8080**
+
+   This is the only address to use. The terminal does not print a link, and the API is not published on a separate port.
+7. **Ask a question.** Upload a PDF, choose a mode, and type your question.
+   - **General Q&A:** questions about one document.
+   - **Multi-Doc:** compare several documents in one question.
+   - **Legal Precision:** returns the exact clause text instead of a paraphrase.
+8. **Expect a slow first question.** The first question downloads the 2.3 GB re-ranker model once into a Docker volume. Later questions do not repeat the download and are faster.
+9. **Stop and start again.** Press Ctrl+C in the terminal to stop. To start again later, run `docker compose up` (without `--build`). Your documents and the downloaded model are kept. **Do not run `docker compose down -v`**: it deletes them.
+
+**If something goes wrong**
+
+- **Docker is not running.** Open Docker Desktop and wait until it says it is running, then try again.
+- **A key is missing or empty.** Check `.env`. `GEMINI_API_KEY` and at least one answer-provider key must have a value.
+- **Port 8080 is already in use.** In `docker-compose.yml`, change the left number in `"8080:80"` (for example to `"9090:80"`), then open `http://localhost:9090`.
+- **Not enough memory.** Give Docker Desktop about 6 GB or more if you can. This is a recommendation, not a guarantee.
+- **The page does not load at first.** The site starts only after the backend reports healthy. Wait a minute and refresh.
+
+Tested on Windows with Docker Desktop (WSL 2): an upload, a question with a cited answer, and a restart that kept the document and the downloaded model. It has not been tested on macOS or Linux.
 
 ## Features
 
-- **Page-cited answers** — every response is grounded in the source document, with the page number attached
-- **Three Q&A modes** from one unified pipeline:
-  - **General** — single-document question answering
-  - **Multi-document** — cross-document comparison and synthesis
-  - **Legal** — exact clause retrieval with clause-level chunking, no paraphrasing
-- **Image understanding** — charts, diagrams, and tables embedded in documents are analyzed and become searchable, with values verified accurate to the source
-- **Precision re-ranking** — a cross-encoder reranker (`bge-reranker-v2-m3`) re-scores retrieved candidates before generation
-- **Two answer styles** — full/verbatim or summarized
-- **Built-in evaluation framework** — retrieval accuracy and answer correctness are measured separately against a labeled Q&A set, not eyeballed
-- **Provider rotation** — answer generation and grading rotate across 7 OpenAI-compatible providers, so one vendor's outage does not stop a run
-
-## Build Progress
-
-| Stage | Status | What it does |
-|---|---|---|
-| 1 — Ingestion & Parsing | ✅ Complete | Extracts text + images per page from PDF/DOCX/TXT, with OCR fallback for scanned pages |
-| 2 — Chunking | ✅ Complete | Splits text into retrievable chunks; clause-aware for legal documents |
-| 3 — Image Analysis | ✅ Complete | Vision model analyzes embedded charts/diagrams into searchable descriptions |
-| 4 — Embedding & Vector Storage | ✅ Complete | Converts chunks into vectors, stored in Qdrant with full metadata |
-| 5 — Retrieval & Re-ranking | ✅ Complete | Mode-aware candidate retrieval, re-ranked for precision |
-| 6 — Answer Generation | ✅ Complete | Generates the final cited answer from retrieved context |
-| 7 — Evaluation Framework | ✅ Built | Two separately-reported metrics — a deterministic retrieved-page check and LLM-graded answer correctness on a fixed verdict scale — plus a multi-document coverage check |
-| 8 — API Layer | ✅ Complete | FastAPI endpoints for health, upload/ingest, list, delete and query |
-| 9 — Web UI | ✅ Built | React + Vite site in `DocSense-UI/`: PDF upload, the three Q&A modes, Summary or Exact-quote answers with clickable page citations, connected to the API |
-
-Every completed stage has been manually tested against 6 real sample documents (including real-world legal contracts from the [CUAD dataset](https://www.atticusprojectai.org/cuad)) and independently verified — not just accepted on the agent's word.
+- **Checked page citations.** The model cites passages by number. The code looks up each cited passage's stored page and drops any citation that does not match a retrieved passage.
+- **Three modes.** General Q&A for one document, multi-document comparison, and exact-clause retrieval for legal text.
+- **Two answer styles.** Summary, or Exact quotes. Legal Precision always uses Exact quotes.
+- **Charts and diagrams.** A vision model describes embedded images, so questions about a chart can be answered and cited.
+- **Scanned pages.** Pages with almost no text go through OCR.
+- **Re-ranking.** A cross-encoder model reorders the retrieved passages before the answer is written.
+- **Provider failover.** Answers are written by one of five LLM providers. If one fails or is rate limited, the next one takes over.
+- **Warnings.** An answer is flagged when the passages scored low, when no citation could be verified, or when the answer was cut off at the output limit.
+- **Provider shown per answer.** Each answer says which provider and model wrote it.
+- **Evaluation framework.** A script measures retrieval and answer quality. An LLM judge, always a different provider from the writer, grades the answers.
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    UI["Web UI<br/>React, served by nginx"]
+    API["FastAPI<br/>one process"]
+    UI -->|"/api"| API
+
+    subgraph ING["Ingestion: when you upload a file"]
+        direction LR
+        PARSE["Parse text<br/>OCR if scanned"] --> CHUNK["Chunk by page"]
+        PARSE --> VISION["Describe images<br/>vision model"]
+        CHUNK --> EMBED["Embed<br/>Gemini, 768 dimensions"]
+        VISION --> EMBED
+        EMBED --> STORE[("Qdrant")]
+    end
+
+    subgraph QRY["Query: when you ask a question"]
+        direction LR
+        RET["Retrieve<br/>embed question, search"] --> RANK["Re-rank<br/>bge-reranker-v2-m3"]
+        RANK --> GEN["Generate answer"]
+        GEN --> VERIFY["Verify citations"]
+    end
+
+    PROVIDERS["Answer providers, tried in order<br/>Groq, Cohere, OpenRouter, NVIDIA, Gemini"]
+
+    API --> PARSE
+    API --> RET
+    STORE -.-> RET
+    GEN <-->|"failover"| PROVIDERS
+    VERIFY -->|"answer, citations, warnings"| API
 ```
-Document Upload
-      │
-      ▼
-Ingestion (text + image extraction, per page)
-      │
-      ├──► Text Chunking (structure-aware / legal-clause aware)
-      └──► Image Analysis (vision model → text description)
-      │
-      ▼
-Embedding + Vector Storage (Qdrant, tagged by doc_id / page_num / type)
-      │
-      ▼
-Retrieval + Re-ranking (mode-aware: single-doc / multi-doc / legal)
-      │                    [query embedding → Gemini key pool]
-      ▼
-Answer Generation (mandatory page citation)
-      │                    [7-provider rotation, sticky + cooldowns]
-      ▼
-Evaluation (retrieval accuracy + LLM-graded correctness)   ← Stage 7, built
-      │
-      ▼
-FastAPI Layer (single process, one shared Qdrant client)   ← Stage 8, complete
-      │
-      ▼
-Web UI (React + Vite, DocSense-UI/)                        ← Stage 9, built
-```
 
-Full architectural detail, module responsibilities, and data schemas are documented in [`TDR.md`](./TDR.md). Product scope and build stages are documented in [`PRD.md`](./PRD.md).
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| PDF / DOCX parsing | PyMuPDF, python-docx |
-| OCR (scanned documents) | Tesseract |
-| Chunking | Custom structure-aware splitter + clause-aware legal chunker (documented deviation, TDR Section 2c) |
-| Document-type classification | Lightweight heuristic classifier (filename + keyword + structural signals) |
-| Image analysis (Stage 3) | **Google Gemini API** — model set by `GEMINI_VISION_MODEL`, default `gemini-3.6-flash` (documented substitution from Claude, TDR Section 2a) |
-| Embeddings (Stage 4) | **Google Gemini API** — `gemini-embedding-001` at 768 dimensions. A local `BGE` backend exists but is **opt-in only** via `DOCSENSE_EMBEDDING_BACKEND=local`, never an automatic fallback (TDR Section 2h) |
-| Answer generation + grading (Stages 6–7) | **Rotation across 7 OpenAI-compatible providers** via `generation/provider_rotation.py` (TDR Section 2i) — see the table below |
-| Vector database | Qdrant, local embedded mode (documented deviation from Docker, TDR Section 2b) |
-| Re-ranking | `bge-reranker-v2-m3`, loaded locally through `sentence-transformers`' `CrossEncoder` |
-| HTTP client | `httpx` — all 7 answer providers speak the OpenAI-compatible `/chat/completions` REST API, so no per-vendor SDK is required |
-| Backend API | FastAPI — single process, one shared Qdrant client (TDR Section 2j) |
-| Evaluation | Custom scoring script — `evaluation/run_eval.py` + `evaluation/llm_judge.py`. **RAGAS is not called by the code**; it remains in `requirements.txt` as a candidate for continuous scoring later |
-| Frontend (Stage 9) | React 18 + Vite 5, React Router and Tailwind CSS, in `DocSense-UI/`. Streamlit was the original plan (TDR Section 2l) |
-
-### Answer providers (generation + grading)
-
-Rotation is **sticky**: one provider serves every question until it fails, then the next provider re-answers that same question from scratch using the already-retrieved chunks. Failures put a provider on a cooldown whose length depends on the error class, and a `401`/`402`/`403` removes it for the rest of the session. Every result records both `provider_used` and `model_used`.
-
-| Order | Env variable | Pinned model | Enabled |
+| Component | Technology | What it does | Where |
 |---|---|---|---|
-| 1 | `RAG_Groq` | `openai/gpt-oss-20b` | yes |
-| 2 | `RAG_NVIDIA` | `minimaxai/minimax-m3.1-flash` | yes |
-| 3 | `RAG_Cohere` | `command-r-08-2024` | yes |
-| 4 | `RAG_OpenRouter` | `openrouter/free` (alias — the model that actually served the request is recorded) | yes |
-| 5 | `RAG_Gemini` | `gemini-3.8-flash` | yes |
-| — | `RAG_SiliconFlow` | `Qwen/Qwen2.5-7B-Instruct` | no |
-| — | `RAG_OpenCode_Console` | `deepseek-v4.1-flash` | no |
+| Web UI | ![React](https://img.shields.io/badge/React-61DAFB?logo=react&logoColor=black) ![Vite](https://img.shields.io/badge/Vite-9135FF?logo=vite&logoColor=white) ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white) | Upload page, chat, cited sources, PDF preview | `DocSense-UI/src/` |
+| Web server | ![nginx](https://img.shields.io/badge/nginx-009639?logo=nginx&logoColor=white) | Serves the built UI and forwards `/api` to the backend | `DocSense-UI/nginx.conf` |
+| API | ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white) ![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white) | Upload, list, delete and query endpoints | `api/` |
+| Parsing and OCR | ![Tesseract](https://img.shields.io/badge/Tesseract-555555) | Reads PDF, DOCX and TXT; OCR for scanned pages | `ingestion/` |
+| Chunking | ![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white) | Splits text into page-aware chunks; legal files by clause | `chunking/` |
+| Embeddings and vision | ![Google Gemini](https://img.shields.io/badge/Google_Gemini-8E75B2?logo=googlegemini&logoColor=white) | Turns chunks and questions into vectors; describes images | `embedding/`, `ingestion/image_analyzer.py` |
+| Vector store | ![Qdrant](https://img.shields.io/badge/Qdrant-DC244C?logo=qdrant&logoColor=white) | Stores chunks with document and page metadata | `embedding/vector_store.py` |
+| Re-ranker | ![Hugging Face](https://img.shields.io/badge/Hugging_Face-FFD21E?logo=huggingface&logoColor=black) ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?logo=pytorch&logoColor=white) | Scores each passage against the question | `retrieval/` |
+| Answer providers | ![Groq](https://img.shields.io/badge/Groq-F55036) ![Cohere](https://img.shields.io/badge/Cohere-39594D) ![OpenRouter](https://img.shields.io/badge/OpenRouter-94A3B8?logo=openrouter&logoColor=white) ![NVIDIA](https://img.shields.io/badge/NVIDIA-76B900?logo=nvidia&logoColor=white) ![Google Gemini](https://img.shields.io/badge/Google_Gemini-8E75B2?logo=googlegemini&logoColor=white) | Write and grade answers, with failover | `generation/` |
+| Evaluation | ![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white) | Retrieval check and LLM-judged answer quality | `evaluation/` |
+| Packaging | ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white) | Runs the backend and the web server together | `Dockerfile`, `docker-compose.yml` |
 
-**Rotation order since 2026-11-13:** Groq, Cohere, OpenRouter, NVIDIA, Gemini. NVIDIA times out often, so it is tried only after the other three.
+<details>
+<summary>Ingestion pipeline: what happens when you upload a file</summary>
 
-The two disabled providers are configured but never called, each logging one line explaining why. Flip `enabled=True` on their entry in `generation/provider_rotation.py` to bring them back in.
+1. **Read.** Text is read page by page: PyMuPDF for PDF, python-docx for DOCX, plain reading for TXT. A page with almost no text goes through Tesseract OCR.
+2. **Find images.** Embedded images smaller than 100 pixels are dropped. The rest go to a Gemini vision model, which writes a factual description and labels the image as a chart, diagram, table or photo. Decorative images are discarded.
+3. **Chunk.** Text is split by paragraph into chunks of about 1,000 characters with a 150-character overlap. A chunk never crosses a page, and every chunk records its document and page number. Legal documents are split by clause instead.
+4. **Embed.** Chunks and image descriptions are embedded with `gemini-embedding-001` at 768 dimensions.
+5. **Store.** The vectors go into Qdrant with their metadata. The store runs in embedded mode, so no separate database is needed.
 
-**Embeddings and image analysis deliberately stay on the Gemini key pool** and are not part of this rotation.
+</details>
 
-> **Note:** TDR.md originally specified Claude (vision + generation), Voyage AI (embeddings), Dockerized Qdrant, and RAGAS. Each was deliberately substituted during the V1 build, and every substitution is documented with its reasoning, what stays unchanged, and a trigger for reconsidering it. See [`TDR.md`](./TDR.md) Sections 2a–2l for the full decision log.
+<details>
+<summary>Query pipeline: what happens when you ask a question</summary>
 
-## Project Structure
+1. **Retrieve.** The question is embedded with the same model and searched against the chosen documents.
+   - Single document: the best passages are kept after re-ranking, up to 5.
+   - Compare mode: each document gets its own candidates, so no requested document is left out. Each document keeps at least one passage, and two when there are up to 4 documents, within a cap of 8 passages.
+   - Legal mode: searches legal documents only and adds each document's opening passage.
+2. **Re-rank.** `bge-reranker-v2-m3`, a cross-encoder, reads the question and each passage together and scores them.
+3. **Generate.** The passages go to an LLM labelled Source 1, Source 2 and so on. The model must cite them as "(Source N)". The first provider that works writes the answer. Failed providers go on a cooldown.
+4. **Verify.** The code maps each cited number to the stored page, drops citations that point to nothing, and adds a warning when confidence is low or the answer was cut off.
 
-Directories that exist today:
+</details>
 
-```
-DocSense/
-├── ingestion/                      # Stage 1 — text + image extraction, OCR fallback
-│   ├── text_parser.py              #   PDF/DOCX/TXT parsing, page numbers preserved
-│   ├── image_extractor.py          #   pulls embedded images out per page
-│   ├── image_analyzer.py           #   Stage 3 — Gemini vision -> text description
-│   ├── image_pipeline.py
-│   ├── ocr_fallback.py             #   Tesseract, for near-empty (scanned) pages
-│   └── pipeline.py
-├── chunking/                       # Stage 2 — structure-aware + legal-clause chunking
-│   ├── text_chunker.py
-│   ├── legal_chunker.py
-│   ├── doc_type_classifier.py      #   legal | financial | research | general
-│   └── pipeline.py
-├── embedding/                      # Stage 4 — embeddings + vector storage
-│   ├── embed_chunks.py             #   Gemini embeddings; opt-in local BGE backend
-│   ├── vector_store.py             #   Qdrant collection, metadata filtering
-│   └── pipeline.py
-├── retrieval/                      # Stage 5 — mode-aware retrieval + re-ranking
-│   ├── retriever.py
-│   ├── reranker.py
-│   └── pipeline.py
-├── generation/                     # Stage 6 — citation-grounded answer generation
-│   ├── prompt_templates.py
-│   ├── answer_with_citations.py    #   parses citations back against real metadata
-│   ├── confidence_check.py
-│   ├── provider_rotation.py        #   7-provider rotation for answer calls (TDR 2i)
-│   ├── gemini_key_rotation.py      #   Gemini key pool for embeddings + vision
-│   └── pipeline.py
-├── evaluation/                     # Stage 7 — evaluation framework
-│   ├── run_eval.py                 #   orchestrator; supports --estimate-only
-│   ├── llm_judge.py                #   fixed-scale LLM-as-judge grading
-│   ├── eval_dataset_supplement.json#   single_doc + multi_doc questions
-│   └── multi_doc_queries.json      #   12 multi-document coverage queries
-├── api/                            # Stage 8 — FastAPI layer
-│   ├── main.py                     #   app, CORS, routes
-│   ├── schemas.py                  #   request/response models
-│   ├── service.py                  #   only module importing Stages 1-6
-│   ├── errors.py                   #   exception -> HTTP mapping
-│   └── test_stage8_api.py          #   mocked tests, zero API calls
-├── DocSense-UI/                    # Stage 9 — web UI (React + Vite)
-│   ├── src/pages/                  #   Home, GetStarted, Chat, Terms
-│   ├── src/lib/                    #   api.js (API client), chatConfig.js, modes.js
-│   ├── public/                     #   logos and the home-page video
-│   └── vite.config.js              #   forwards /api/... to the API on port 8000
-├── data/
-│   ├── sample_docs/                # 6 test documents (synthetic + real CUAD contracts)
-│   ├── eval/                       # cuad_sample_eval.json — labeled Q&A set
-│   ├── processed/                  # extracted images (gitignored)
-│   ├── vector_store/               # local Qdrant storage (gitignored)
-│   └── README_datasets.md
-├── .env                            # Local keys — gitignored, never committed
-├── .env.example                    # Template with empty values, safe to commit
-├── PRD.md                          # Product Requirements Document
-├── TDR.md                          # Technical Design Report (incl. deviations 2a–2l)
-├── requirements.txt
-└── README.md
-```
+The design decisions and the reasons behind them are in [TDR.md](TDR.md).
 
-`evaluation/results/` is created on the first completed evaluation run and is gitignored.
+## Evaluation
 
-## Getting Started
+These are measured results from the final run on 2026-11-03 (commit `3b9c014`, results file `eval_results_20261103T180353Z.json`, which is not stored in the repository).
 
-```bash
-# Clone the repository
-git clone https://github.com/<your-username>/docsense.git
-cd docsense
+| Measure | Result |
+|---|---|
+| Retrieval: the correct page was retrieved | 23 of 23 questions |
+| Multi-document coverage: every requested document represented | 12 of 12 queries (32 of 32 documents) |
+| Answers judged correct by an independent LLM judge | 18 of 23 (4 partial, 1 incorrect) |
+| Answers correct on manual review | 20 of 23 |
 
-# Install dependencies
-pip install -r requirements.txt
+Earlier improvements: retrieval went from 21/23 to 23/23, and multi-document coverage from 5/12 to 12/12.
 
-# Create your local env file from the template, then fill in the keys you have
-cp .env.example .env
-```
+The test set is small: 23 questions and 12 coverage queries over 6 sample documents, three of them real contracts from the CUAD dataset. Treat the numbers as a sanity check, not a benchmark. The runs used the Exact quotes answer style.
 
-### API keys
+## Roadmap
 
-There are **two independent key groups**, and they are not interchangeable. Variable names are **case-sensitive** — copy them exactly. Windows environment variables happen to be case-insensitive, so a wrong case can appear to work locally and then break on Linux/macOS.
+| Version | Scope | Status |
+|---|---|---|
+| V1 | PDF, DOCX and TXT, three modes, page citations, image analysis | Current |
+| V1 fix | DOCX and TXT upload in the web page (the backend already reads them) | Planned |
+| V2 | PPTX and XLSX/CSV | Planned |
+| V3 | Password-protected PDFs, old `.DOC`, handwriting OCR | Planned |
+| V4 | Multi-user accounts, persistent history, confidence scoring in the UI | Planned |
+| Later | Bring your own API key, hosted deployment | Planned |
 
-**1. Gemini key pool — embeddings (Stage 4) and image analysis (Stage 3)**
+## Known limitations
 
-```
-GEMINI_API_KEY
-GEMINI_API_KEY_2 ... GEMINI_API_KEY_7
-```
+- Single user, no login. Do not expose it to the public internet.
+- The web page accepts PDF only for now. DOCX and TXT upload in the web page is a planned fix.
+- Answers can take tens of seconds on a CPU. Most of the time goes to the re-ranker and to slow free-tier providers.
+- Free LLM tiers have rate limits.
+- The answer model sometimes wrongly says "not found", or quotes only part of a clause.
+- Legal mode was tested on one document at a time.
+- Summary answers have not been evaluated. The measured results used Exact quotes.
+- No handwriting OCR. English only. The upload limit is 25 MB.
+- Documents are sent to third-party AI providers (Gemini and the answer providers). Do not upload confidential files.
 
-Each should belong to a **different Google Cloud project**, since Gemini's free-tier limits apply per project rather than per key — multiple keys from the same project add no headroom. `GEMINI_API_KEY` alone is enough to start. Retrieval depends on this group: every query needs one embedding call.
+## Run without Docker (Windows)
 
-**2. Answer providers — generation (Stage 6) and grading (Stage 7)**
+1. Install Python 3.13 and Node.js (the Docker image uses Node.js 20).
+2. For scanned PDFs, install Tesseract and Poppler and add them to your PATH.
+3. In the project folder, run `pip install -r requirements.txt`.
+4. In the `DocSense-UI` folder, run `npm install`.
+5. Copy `.env.example` to `.env` and add your keys, as in the quick start.
+6. Double-click `start.bat`. It opens the API and the UI in two windows, then opens `http://localhost:5173`.
 
-```
-RAG_Gemini
-RAG_Groq
-RAG_NVIDIA
-RAG_OpenRouter
-RAG_SiliconFlow
-RAG_Cohere
-RAG_OpenCode_Console
-```
+Never run `start.bat` twice. The local Qdrant store allows only one backend process.
 
-One working key is enough to run; the rotation skips any provider whose key is missing. See the provider table above for which are enabled by default.
+## Configuration
 
-Optional variables, all with working defaults: `GEMINI_VISION_MODEL`, `DOCSENSE_EMBEDDING_BACKEND`, `QDRANT_COLLECTION`, `QDRANT_URL`, `QDRANT_API_KEY`.
+Set these in `.env`. The file is never committed.
 
-Never commit `.env` — it is gitignored. Do not paste key values into issues, screenshots, or commit messages.
+| Variable | Purpose |
+|---|---|
+| `GEMINI_API_KEY`, `GEMINI_API_KEY_2` to `GEMINI_API_KEY_7` | Embeddings and image reading. One is enough. Extra keys from other Google projects add quota. |
+| `RAG_Groq`, `RAG_Cohere`, `RAG_OpenRouter`, `RAG_NVIDIA`, `RAG_Gemini` | Answer providers, tried in this order. At least one is required. |
+| `RAG_SiliconFlow`, `RAG_OpenCode_Console` | Listed in the file but disabled in the code. |
+| `GEMINI_VISION_MODEL` | Optional. Overrides the image-reading model. |
+| `DOCSENSE_EMBEDDING_BACKEND` | Optional. Set to `local` to use a local embedding model. |
+| `QDRANT_URL`, `QDRANT_API_KEY` | Optional. Use a hosted Qdrant instead of the embedded store. |
+| `ANTHROPIC_API_KEY`, `VOYAGE_API_KEY` | Not used at present. |
 
-### Running it
+## API
 
-```bash
-# Per-stage manual test scripts
-python -m ingestion.test_stage1_manual
-python -m chunking.test_stage2_manual
-python -m ingestion.test_stage3_manual
-python -m embedding.test_stage4_manual
-python -m retrieval.test_stage5_manual
-python -m generation.test_stage6_manual
-
-# Stage 8 — run the API (see the warning below about --reload)
-uvicorn api.main:app --port 8000
-
-# Stage 8 mocked tests (no API calls)
-python -m api.test_stage8_api
-
-# Stage 9 — the web UI, in a second terminal while the API runs (see "Web UI (Stage 9)" below)
-cd DocSense-UI && npm install && npm run dev
-```
-
-Qdrant runs in local embedded mode by default — no separate database server needed. Note that it takes an exclusive lock on its storage directory, so only one process can use the vector store at a time.
-
-## Verified Results So Far
-
-A few concrete, independently-checked results from testing:
-
-- **Chart understanding:** every value read off an embedded revenue chart (title, axis labels, all four data points) matched the source chart exactly
-- **Legal clause precision:** exact clauses (e.g., "Termination for Convenience," "Indemnity") correctly isolated to their own chunk, with the correct page number, across both synthetic and real-world contracts
-- **Retrieval confidence:** for an image-based question, the correct chart chunk was ranked ~160× higher than the next-best text chunk
-- **Multi-document mode:** correctly surfaced relevant clauses from 3 different contracts in a single ranked list
-- **Citation grounding:** generated answers were checked against the real page/section metadata of every source they cite, and the exact quoted text was cross-checked against the original source PDFs — no hallucinated pages, no dropped or fabricated citations
-
-## API (Stage 8)
-
-```bash
-uvicorn api.main:app --port 8000
-```
-
-Interactive docs at `http://127.0.0.1:8000/docs`.
-
-> **Run it as a single process.** Do not pass `--workers`, and do not pass `--reload`. The local embedded Qdrant store holds an exclusive file lock, and `--reload` spawns a second process which then fails with *"Storage folder data/vector_store is already accessed by another instance"*. For the same reason, don't run the API at the same time as `evaluation/run_eval.py`.
+The backend is a FastAPI app. Under Docker it is reachable only through the site, at `/api`. Without Docker it runs on port 8000, and its interactive docs are at `http://127.0.0.1:8000/docs`.
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/health` | Liveness and configuration. Takes no lock, makes no Qdrant or provider call |
-| POST | `/documents` | Upload a PDF/DOCX/TXT. Returns **202** with a `job_id`; ingestion runs in the background |
-| GET | `/documents/jobs/{job_id}` | Ingestion status: `queued` / `running` / `done` / `failed` |
-| GET | `/documents` | List stored documents with chunk and page counts |
-| DELETE | `/documents/{doc_id}` | Delete a document's chunks |
-| POST | `/query` | Ask a question in `single_doc`, `multi_doc` or `legal` mode |
+| GET | `/health` | Status and configuration. No provider call. |
+| POST | `/documents` | Upload a PDF, DOCX or TXT file (up to 25 MB). Returns 202 and a `job_id`. |
+| GET | `/documents/jobs/{job_id}` | Ingestion status: `queued`, `running`, `done` or `failed`. |
+| GET | `/documents` | List stored documents. |
+| DELETE | `/documents/{doc_id}` | Delete a document's chunks. |
+| POST | `/query` | Ask a question in `single_doc`, `multi_doc` or `legal` mode. |
 
-Upload cap is 25 MB; uploads land in `data/uploads/` (gitignored). CORS is restricted to localhost origins. Errors map to 415 (unsupported type), 413 (too large), 404 (unknown `doc_id`/`job_id`), 422 (invalid input or unreadable document) and 503 (providers exhausted, or embeddings unavailable — with `Retry-After`). No response ever contains a stack trace, a server path, or key material.
+Errors: 415 unsupported type, 413 too large, 404 unknown id, 422 invalid input or unreadable file, 503 providers or embeddings unavailable.
 
-**Query request**
+Request:
 
 ```json
 { "question": "What is the termination notice period?",
@@ -298,7 +233,7 @@ Upload cap is 25 MB; uploads land in `data/uploads/` (gitignored). CORS is restr
   "answer_style": "full" }
 ```
 
-**Query response** — the full response is always returned; the UI decides what to show. Below is a real response from a live call, with the evidence list truncated to 2 of the 5 chunks it returned:
+Response (the list of retrieved passages is shortened to one):
 
 ```json
 {
@@ -314,10 +249,7 @@ Upload cap is 25 MB; uploads land in `data/uploads/` (gitignored). CORS is restr
     "sources": [
       { "source_number": 1, "doc_name": "SampleServices_MSA_Contract.pdf", "page_num": 3,
         "section": "4.2 Termination for Convenience",
-        "text": "4.2 Termination for Convenience. Either party may terminate this Agreement with thirty (30) days\nwritten notice to the other party." },
-      { "source_number": 2, "doc_name": "SampleServices_MSA_Contract.pdf", "page_num": 3,
-        "section": "4.3 Termination for Cause",
-        "text": "4.3 Termination for Cause. Either party may terminate this Agreement immediately upon written notice\nif the other party materially breaches this Agreement and fails to cure such breach within fifteen (15)\ndays of receiving written notice describing the breach." }
+        "text": "4.2 Termination for Convenience. Either party may terminate this Agreement with thirty (30) days\nwritten notice to the other party." }
     ]
   },
   "meta": {
@@ -328,117 +260,29 @@ Upload cap is 25 MB; uploads land in `data/uploads/` (gitignored). CORS is restr
 }
 ```
 
-`evidence.sources` carries **every** retrieved chunk with its `source_number`, cited or not — match `source_number` against `core.citations` to highlight the ones the answer actually used. `meta.citation_check` is Stage 6's own cross-check of the model's citations against what was really retrieved.
+## Project structure
 
-## Web UI (Stage 9)
-
-A React + Vite site in `DocSense-UI/`, connected to the API above (TDR Section 2l).
-
-```bash
-# Terminal 1, from the project root: the API
-uvicorn api.main:app --port 8000
-
-# Terminal 2: the UI (needs Node.js 18 or newer)
-cd DocSense-UI
-npm install
-npm run dev
+```
+api/             FastAPI app: routes, schemas, error mapping, offline tests
+chunking/        Page-aware and clause-aware chunking, document type guess
+data/            Sample documents, the labelled question set, dataset notes
+docs/assets/     README images
+DocSense-UI/     React web UI, nginx config and its Dockerfile
+embedding/       Gemini embeddings and the Qdrant store
+evaluation/      Evaluation script, LLM judge, question sets
+generation/      Prompts, provider failover, citation checks
+ingestion/       PDF, DOCX and TXT parsing, OCR, image extraction and analysis
+retrieval/       Search, candidate selection and re-ranking
+Dockerfile       Backend image
+docker-compose.yml   Backend and web server
+start.bat        Local start on Windows without Docker
 ```
 
-Open `http://localhost:5173`. Use `localhost`, because the dev server may not answer on `127.0.0.1`. The dev server forwards `/api/...` requests to the API on port 8000, so the API's CORS settings need no change; set `DOCSENSE_API_URL` to use another address.
+## Documentation, licence and notices
 
-- **Get Started:** choose General Q&A, Multi-Doc or Legal Precision, then add PDFs (up to 25 MB each, the API's limit).
-- **Chat:** the files are sent to the API when the page opens, unless a document with the same file name is already stored. Answers show clickable `[n]` citations, the cited passages with links to their pages in the PDF preview, and the provider and model that answered. The API's warnings appear under the answer as a note.
-- **Summary | Exact quotes:** a header toggle that sets `answer_style` for each question. General Q&A and Multi-Doc start on Summary. Legal Precision always uses Exact quotes, because its prompt asks for the exact clause text.
+- [PRD.md](PRD.md): what the product does and what is in scope for each version.
+- [TDR.md](TDR.md): technical design, decisions and test results.
+- Licence: MIT, see [LICENSE](LICENSE).
+- Dataset credit: three sample contracts come from the Contract Understanding Atticus Dataset (CUAD), by The Atticus Project, under CC BY 4.0. See [data/README_datasets.md](data/README_datasets.md).
 
-## Evaluation
-
-Accuracy is measured, not assumed. The framework runs a labeled question set — including real, expert-annotated clause data from CUAD — through the full pipeline.
-
-**Preview the API cost first.** `--estimate-only` prints the call breakdown and exits **without making a single API call**:
-
-```bash
-python -m evaluation.run_eval --estimate-only
-```
-
-For the current dataset that reports **81** calls as a floor: **35** against the Gemini key pool (query embeddings for 23 questions plus 12 coverage queries) and **46** against the answer providers (23 generation plus 23 grading). It is a floor rather than a ceiling, because every retry is an additional real request.
-
-```bash
-python -m evaluation.run_eval
-```
-
-Run it as a module (`-m`), not as a file path — it relies on package-relative imports.
-
-**What gets reported**, as two separate metrics so a fault in one is never blamed on the other:
-
-- **Retrieval accuracy** — deterministic, no LLM involved. For each requested document, did *that document's own* expected page appear among the chunks retrieved for it? Multi-document questions use a per-document `expected_pages_by_doc` mapping, because the same clause can sit on a different page in each contract, and a question only counts as correct if **every** requested document's page was found.
-- **Answer correctness** — LLM-as-judge on a fixed scale of `correct` / `partially_correct` / `incorrect`, never free text, so verdicts stay comparable.
-
-A question that could not be graded at all is recorded as **`not_measured`** with an `error_kind`, and is **excluded from every accuracy rate**. That outcome sits deliberately outside the three-value grading scale: counting a provider outage as a wrong answer would make the headline numbers reflect vendor capacity rather than pipeline quality.
-
-Output is a full per-question transcript — expected versus generated answer, retrieved pages per document, verdict, reason, raw grader response, and the `provider_used` / `model_used` that served it — written to a timestamped JSON under `evaluation/results/`, alongside a readable console summary broken down by mode.
-
-A separate set of **12 multi-document coverage queries** checks how often a requested document is left out of the retrieved context entirely, which is the known limitation recorded in TDR Section 2f.
-
-**Final Stage 7 run** (2026-11-03, HEAD 3b9c014, results file `eval_results_20261103T180353Z.json`). This is the headline result. It replaces the 2026-11-02 run, which ran on commit 1e463c7 before the truncation fix.
-
-- Retrieval 23/23. Coverage 12/12 queries and 32/32 documents.
-- Judge verdicts: 18 correct, 4 partially_correct (Q5, Q8, Q18, Q21), 1 incorrect (Q1), 0 not_measured.
-- Manual review (by hand, not by the judge): 20 correct, 2 partially_correct (Q8, Q18), 1 incorrect (Q1). The judge marked Q5 down for extra detail and Q21 for wording, which its own rules allow.
-- 81 calls, 0 failures, 8 min 8 s. Groq wrote all 23 answers and Cohere graded all 23. NVIDIA was skipped in memory only, with no repo change.
-
-TDR Section 2k has the details, including an aborted first attempt and the first live truncation warning (Q7).
-
-## Roadmap
-
-| Version | Scope |
-|---|---|
-| **V1** (Stages 1–9 built; minor fixes and speed work pending) | PDF, DOCX, TXT + embedded image analysis, 3 Q&A modes |
-| V2 | PPTX, XLSX/CSV support |
-| V3 | Password-protected PDFs, legacy `.DOC`, handwriting OCR |
-| V4 | Multi-user support, persistent history, confidence scoring UI |
-
-## Reliability
-
-Free-tier APIs fail in ways that are easy to mistake for bugs, so a few things are deliberate:
-
-- **Every API call has an explicit 45-second timeout.** The Google SDK applies no timeout by default, which meant a single stalled request could hang a whole run indefinitely with nothing raised to catch.
-- **Narrowed exception handling.** Only genuine "the API did not serve this request" failures trigger fallback behaviour. A `TypeError` or `KeyError` in our own code propagates intact instead of being misreported as a provider outage.
-- **`504 DEADLINE_EXCEEDED` is treated as transient**, alongside `503`, so it rotates to the next provider instead of failing the question outright.
-- **Timestamped logs with a heartbeat during backoff waits**, so a run that is deliberately waiting looks clearly different from one that has frozen.
-- **No duplicate retrieval.** Retrieved chunks are passed straight into `generate_answer()` rather than being retrieved a second time, which removes one embedding call per question.
-- **The embedding fallback fails cleanly.** If Gemini embeddings are unavailable it raises `EmbeddingUnavailableError` rather than silently switching to the local model. The local backend produces vectors of different dimensionality *and* in a different vector space, so an automatic switch would write quietly-wrong vectors into the collection. It is opt-in only via `DOCSENSE_EMBEDDING_BACKEND=local`, and a dimension check guards both backends.
-
-## Known Limitations
-
-Documented honestly rather than hidden. Full reasoning for each is in [`TDR.md`](./TDR.md):
-
-- **Multi-document coverage is guaranteed at retrieval, within a cap.** Retrieval used to return one global top-k across all requested documents, so a requested document could be left out entirely. It now reserves chunks for every requested document, within an 8-chunk context cap: at least two each for up to 4 documents, at least one each for up to 8. On the 12 coverage queries this gave full coverage on 12 of 12, against 5 of 12 before. The final Stage 7 run (2026-11-03, HEAD 3b9c014) also had full coverage on all 12, with 32 of 32 documents; it supersedes the 2026-11-02 run at commit 1e463c7. *(TDR 2f, 2k)*
-- **Answer writers sometimes quote selectively or answer "no such clause" wrongly.** In the 11-question re-check, one answer quoted the "executed this Agreement as of the date below" line and stopped before the signature dates it introduces (Q8). Another said the contract gives no expiration date, although the retrieved context contained "This Agreement shall remain in effect until terminated by the Parties" (Q16). In both cases the text had been retrieved, so these are generation behaviours, not retrieval misses. In the final run, Groq said a contract has no document name although retrieval was correct (Q1), a false "not found"; the app's own "No sources could be verified" warning fired. *(TDR 2k)*
-- **"Not found" behaviour is not covered by a correctness eval entry yet** — no labeled question currently tests whether the system correctly reports that information is absent. *(TDR 2g)*
-- **Embeddings and image analysis are still single-vendor.** They remain on the Gemini key pool, so a Gemini-wide outage still blocks retrieval even when several answer providers are healthy. This is the largest remaining shared-fate risk. *(TDR 2i)*
-- **Citation formats differ by model.** The parser accepts any provider that emits `(Source N)`, but adherence is per-model behaviour, not a guarantee — which is why `provider_used` is recorded on every result. Verdicts are not strictly comparable across providers. *(TDR 2i)*
-- **Documents pass through several third-party providers.** Retrieved text is sent to whichever vendor is active. Fine for the public sample documents used here; review before using it on anything confidential. *(TDR 2i)*
-- **NVIDIA's free endpoint times out intermittently.** On 2026-11-01 it graded answers in about 2.5 s in the afternoon, then gave no response to six requests in a row that evening. Rotation absorbs this with a 60-second cooldown while the next provider answers, but each timeout adds about 45 s to that question. *(TDR 2k)*
-- **Groq's reasoning length varies, and can use up the whole output limit.** On the same multi-document question it spent 764, about 1,900 (inferred) and then 3,998 output tokens on reasoning. At 3,998 of 4,000 it returned an empty answer and another provider wrote it instead. In the final run it finished that question normally at 1,097 output tokens. A lower reasoning effort for Groq is the candidate fix; it is deferred. *(TDR 2k)*
-- **Legal and single-document answers keep a 1,024-token output limit, and Groq can truncate legal answers.** Reasoning counts inside the limit. In the final run, Groq's Q7 answer used all 1,024 output tokens, 797 of them reasoning, and stops mid-sentence at "…or if". The app showed the warning "This answer was cut off at the output limit and may be incomplete.", the first time it fired live. *(TDR 2k)*
-- **The grader does not see truncation.** It still marked the cut-off Q7 answer correct, because the parties quote is complete. *(TDR 2k)*
-- **The grader can be strict on extra detail and wording.** In the final run it marked Q5 down for extra detail and Q21 for wording, both of which its own rules allow. In the 2026-11-02 run it marked Q5 and Q7 down for extra, accurate detail, and Q11 for omitting a requirement that the quoted clause does contain. *(TDR 2k)*
-- **Answer writers can misspell file names.** In both the 2026-11-02 run and the final run, one answer's heading spelled a contract file as `..._SERVICES_AGEM.pdf` instead of `..._SERVICES_AGREEM.pdf` (Q22). *(TDR 2k)*
-- **The low-confidence warning is noisy.** It fired on 11 of the 23 answers in the final run. *(TDR 2k)*
-- **An empty OpenRouter reply has no logged `finish_reason`.** In the final run's first attempt, OpenRouter returned HTTP 200 with empty content while grading. That path does not log `finish_reason`, so the cause is unproven. *(TDR 2k)*
-- **Answers through the UI take about 15–60 s.** In a five-question test, questions took 16–57 s. The reranker runs on the CPU, at about 11–12 s per question and about 48 s on the first question after the API starts, and slow or failing providers added up to about 44 s. Speed fixes are planned. *(TDR 2l)*
-- **The web UI reuses stored documents by file name.** The API names a document after its file, so a changed file with the same name is answered from the old copy until you delete it (`DELETE /documents/{doc_id}`) or rename the file. *(TDR 2l)*
-- **The web UI has no chat memory.** Each question is answered on its own. *(TDR 2l)*
-- **Summary answers are not covered by the Stage 7 results**, which used Exact quotes (`answer_style: "full"`). *(TDR 2l)*
-- **The UI's `/api` forwarding exists only in `npm run dev` and `npm run preview`.** Hosting the built site needs `/api` routed to the API, or `VITE_API_BASE_URL` plus a CORS change on the API. *(TDR 2l)*
-- **Free-tier terms and limits apply.** Some providers' free tiers carry usage caps and non-commercial restrictions, and running an evaluation suite repeatedly can exhaust them. Several providers' current quotas and context windows could **not** be verified from official documentation and are deliberately not quoted here. *(TDR 2i)*
-- **Multi-key rotation is a development-volume workaround**, not a production rate-limiting strategy. *(TDR 2d)*
-
-## Documentation
-
-- [`PRD.md`](./PRD.md) — Product requirements, scope, and build stages
-- [`TDR.md`](./TDR.md) — Technical architecture, schemas, module design, and the full log of documented deviations from the original spec (Sections 2a–2l)
-
-## License
-
-Released under the [MIT License](LICENSE).
+Product and company names and logos are trademarks of their respective owners. DocSense is not affiliated with or endorsed by them.
