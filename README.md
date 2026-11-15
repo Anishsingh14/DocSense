@@ -166,7 +166,6 @@ The test set is small: 23 questions and 12 coverage queries over 6 sample docume
 | Version | Scope | Status |
 |---|---|---|
 | V1 | PDF, DOCX and TXT, three modes, page citations, image analysis | Current |
-| V1 fix | DOCX and TXT upload in the web page (the backend already reads them) | Planned |
 | V2 | PPTX and XLSX/CSV | Planned |
 | V3 | Password-protected PDFs, old `.DOC`, handwriting OCR | Planned |
 | V4 | Multi-user accounts, persistent history, confidence scoring in the UI | Planned |
