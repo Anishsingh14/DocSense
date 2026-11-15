@@ -1,0 +1,22 @@
+# Keys and local data never go into an image or the build context.
+.env
+.env.*
+data/vector_store
+data/uploads
+data/processed
+logs
+legacy
+evaluation/results
+
+# Build output and caches
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+*.log
+
+# Not needed to build
+.git
+.gitignore
+.vscode
+.idea

@@ -1,0 +1,44 @@
+# DocSense: the API and the web UI.
+#   1. Copy .env.example to .env and add your own keys (a Gemini key plus one answer-provider key).
+#   2. docker compose up --build
+#   3. Open http://localhost:8080
+# Keys come only from your .env file at run time. They are never copied into an image.
+name: docsense
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      HF_HOME: /models
+    volumes:
+      - vector_store:/app/data/vector_store   # stored documents and their vectors
+      - uploads:/app/data/uploads             # uploaded files
+      - processed:/app/data/processed         # images extracted from uploaded documents
+      - model_cache:/models                   # the downloaded re-ranker (about 2.3 GB)
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: DocSense-UI/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  vector_store:
+  uploads:
+  processed:
+  model_cache:

@@ -1,70 +1,30 @@
+# DocSense dependencies: direct dependencies, pinned to the versions installed on the machine that
+# produced the Stage 7 evaluation results (Python 3.13.2).
+#
+# torch: the Dockerfile installs the CPU-only build of this same version first, from
+# https://download.pytorch.org/whl/cpu. A plain `pip install -r requirements.txt` takes it from PyPI.
+
 # --- Backend API ---
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
-python-multipart==0.0.9
-pydantic==2.9.2
-python-dotenv==1.0.1
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+python-multipart==0.0.32
+pydantic==2.13.4
+python-dotenv==1.2.3
 
 # --- Document parsing ---
-pymupdf==1.24.10          # PDF text + image extraction (PyMuPDF / fitz)
-python-docx==1.1.2        # DOCX parsing
-pytesseract==0.3.13       # OCR for scanned PDFs (requires Tesseract installed on system)
-pdf2image==1.17.0         # Converts PDF pages to images for OCR
-Pillow==10.4.0             # Image handling
+pymupdf==1.28.2           # PDF text + image extraction (PyMuPDF)
+python-docx==1.2.0        # DOCX parsing
+pytesseract==0.3.13       # OCR for scanned PDFs (needs Tesseract installed on the system)
+pdf2image==1.17.0         # PDF pages to images for OCR (needs Poppler on the system)
+Pillow==12.2.0            # Image handling
 
-# --- Chunking / Orchestration ---
-llama-index==0.11.14
-llama-index-embeddings-voyageai==0.2.3
-llama-index-vector-stores-qdrant==0.3.0
+# --- Embeddings, vector database, re-ranking ---
+sentence-transformers==3.1.1   # loads the bge-reranker-v2-m3 CrossEncoder (retrieval/reranker.py)
+qdrant-client==1.11.2          # local embedded Qdrant (embedding/vector_store.py)
+torch==2.13.0                  # used by sentence-transformers
+transformers==4.57.6           # used by sentence-transformers
+numpy==2.3.5                   # used by torch, transformers and qdrant-client
 
-# --- Embeddings ---
-# voyageai==0.2.3          # Voyage AI embeddings (paid API) — per TDR.md, not currently used.
-                           # DEVIATION: see Section 2a. Gemini embedding API (gemini-embedding-001)
-                           # is used instead for Stage 4 (embedding/embed_chunks.py).
-sentence-transformers==3.1.1   # Local/free fallback (BGE models) — available if Gemini
-                                # embeddings are ever unavailable/rate-limited
-
-# --- Vector database ---
-qdrant-client==1.11.2
-
-# --- Re-ranking ---
-FlagEmbedding==1.2.11      # bge-reranker-v2-m3.
-                           # NOTE (import audit, 2026-10-27): not imported anywhere in the
-                           # codebase. retrieval/reranker.py loads the reranker through
-                           # sentence-transformers' CrossEncoder instead (see
-                           # sentence-transformers above). Left in place rather than removed
-                           # because FlagEmbedding is the canonical library for this model
-                           # and removing it is an environment change, not a docs change —
-                           # flagged for a decision rather than deleted unilaterally.
-
-# --- LLM / Vision ---
-anthropic==0.34.2          # Claude API (generation + vision) — per TDR.md, not currently used.
-                           # DEVIATION: user has no Claude/Anthropic billing set up. Stages 3
-                           # (vision) and 6 (generation) use Gemini instead (see below). Kept
-                           # here, unpinned from active use, so switching back later is a small
-                           # change (swap the client in image_analyzer.py / answer_with_citations.py).
-google-genai==2.24.0       # Google Gemini API — vision (Stage 3) and embeddings (Stage 4).
-                           # NO LONGER used for answer generation or grading: those rotate
-                           # across 7 OpenAI-compatible providers via
-                           # generation/provider_rotation.py (TDR Section 2i). Gemini is still
-                           # one of those 7, but reached over plain HTTP rather than this SDK.
-
-# --- HTTP client ---
-httpx==0.28.1              # ADDED 2026-10-27 (was previously relied on only transitively via
-                           # google-genai, which is fragile — a google-genai upgrade could drop
-                           # or change it). Imported directly by
-                           # generation/provider_rotation.py (all 7 answer providers speak the
-                           # OpenAI-compatible /chat/completions REST API, so no vendor SDK is
-                           # needed), generation/gemini_key_rotation.py and
-                           # embedding/embed_chunks.py (both catch httpx timeout/connection
-                           # errors explicitly).
-
-
-# --- Evaluation ---
-ragas==0.1.20
-datasets==3.0.1
-
-# --- Utilities ---
-numpy==1.26.4
-pandas==2.2.3
-tqdm==4.66.5
+# --- Gemini (embeddings and image reading) and HTTP ---
+google-genai==2.24.0
+httpx==0.28.1
